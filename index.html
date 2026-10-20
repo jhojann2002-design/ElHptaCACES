@@ -1,0 +1,2514 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EL HPTA CACES | Suite Clínica & Simulador EHEP Ecuador</title>
+  
+  <!-- PWA & Mobile Web App Meta -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#10b981">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="CACES MedPrep">
+  
+  <!-- Restauración instantánea de tema -->
+  <script>
+    if (localStorage.getItem('caces_theme') === 'light') {
+      document.documentElement.classList.remove('dark');
+    } else {
+      document.documentElement.classList.add('dark');
+    }
+  </script>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400..800;1,400..800&family=Outfit:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+            display: ['"Outfit"', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+          },
+          colors: {
+            bto: {
+              lime: '#10B981',
+              coral: '#F43F5E',
+              cyan: '#0EA5E9',
+              amber: '#F59E0B',
+              dark: '#080C14',
+              panel: '#101726',
+              paper: '#F4F6F9',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- CDNs: Supabase, PDF.js, Chart.js, Canvas-Confetti -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+  <style>
+    :root {
+      --bg-subtle-grid: rgba(15, 23, 42, 0.03);
+      --card-border: rgba(203, 213, 225, 0.85);
+      --card-shadow: 0 10px 30px -5px rgba(15, 23, 42, 0.05), 0 4px 12px -2px rgba(15, 23, 42, 0.03);
+    }
+    .dark {
+      --bg-subtle-grid: rgba(255, 255, 255, 0.02);
+      --card-border: rgba(51, 65, 85, 0.65);
+      --card-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.6);
+    }
+
+    body {
+      background-image: 
+        radial-gradient(ellipse 80% 50% at 50% -15%, rgba(16, 185, 129, 0.10), transparent),
+        linear-gradient(to right, var(--bg-subtle-grid) 1px, transparent 1px),
+        linear-gradient(to bottom, var(--bg-subtle-grid) 1px, transparent 1px);
+      background-size: 100% 100%, 40px 40px, 40px 40px;
+      background-attachment: fixed;
+      font-size: 14px;
+    }
+    @media (min-width: 640px) {
+      body { font-size: 16px; }
+    }
+
+    .bto-card {
+      border: 1px solid var(--card-border);
+      box-shadow: var(--card-shadow);
+      backdrop-filter: blur(12px);
+      transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .bto-btn {
+      border: 1px solid var(--card-border);
+      transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .bto-btn:hover:not(:disabled) {
+      transform: translateY(-1px);
+      border-color: #10B981;
+      box-shadow: 0 6px 20px -4px rgba(16, 185, 129, 0.25);
+    }
+    .bto-btn:active:not(:disabled) {
+      transform: translateY(0px);
+    }
+
+    .nav-tab-btn {
+      position: relative;
+      transition: all 0.2s ease;
+    }
+    .nav-tab-active {
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.16), rgba(14, 165, 233, 0.08)) !important;
+      color: #059669 !important;
+      border-color: rgba(16, 185, 129, 0.45) !important;
+      font-weight: 700 !important;
+      box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.1);
+    }
+    .dark .nav-tab-active {
+      color: #34D399 !important;
+      border-color: rgba(52, 211, 153, 0.4) !important;
+    }
+
+    /* Dial Selector Modo Simulador / Modo Estudio */
+    .mode-dial-wrapper {
+      position: relative;
+      display: inline-grid;
+      grid-template-columns: 1fr 1fr;
+      padding: 4px;
+      border-radius: 16px;
+      background: rgba(15, 23, 42, 0.06);
+      border: 1px solid var(--card-border);
+    }
+    .dark .mode-dial-wrapper {
+      background: rgba(15, 23, 42, 0.75);
+    }
+    .mode-dial-pill {
+      position: absolute;
+      top: 4px;
+      bottom: 4px;
+      width: calc(50% - 4px);
+      left: 4px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #10B981, #0D9488);
+      box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
+      transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 0;
+    }
+    .mode-dial-wrapper[data-active-mode="estudio"] .mode-dial-pill {
+      transform: translateX(100%);
+      background: linear-gradient(135deg, #0EA5E9, #0284C7);
+      box-shadow: 0 4px 14px rgba(14, 165, 233, 0.35);
+    }
+    .mode-dial-btn {
+      position: relative;
+      z-index: 1;
+      transition: color 0.2s ease;
+    }
+
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(100, 116, 139, 0.4); border-radius: 9999px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(100, 116, 139, 0.65); }
+
+    @keyframes pulse-ecg {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.45; }
+    }
+    .ecg-live { animation: pulse-ecg 1.2s infinite ease-in-out; }
+    
+    @keyframes shake-screen {
+      0%, 100% { transform: translateX(0); }
+      20%, 60% { transform: translateX(-6px); }
+      40%, 80% { transform: translateX(6px); }
+    }
+    .shake-error { animation: shake-screen 0.35s ease-in-out; }
+
+    .clinical-prose {
+      line-height: 1.75;
+      letter-spacing: -0.005em;
+    }
+    .clinical-prose strong, .clinical-prose b {
+      font-weight: 700;
+      color: #0F172A;
+      background: rgba(16, 185, 129, 0.14);
+      padding: 1px 6px;
+      border-radius: 6px;
+    }
+    .dark .clinical-prose strong, .dark .clinical-prose b {
+      color: #F8FAFC;
+      background: rgba(16, 185, 129, 0.22);
+    }
+    .clinical-prose ul {
+      list-style-type: none;
+      padding-left: 0;
+      margin-top: 0.75rem;
+      margin-bottom: 0.75rem;
+    }
+    .clinical-prose li {
+      position: relative;
+      padding-left: 1.5rem;
+      margin-bottom: 0.5rem;
+    }
+    .clinical-prose li::before {
+      content: "";
+      position: absolute;
+      left: 0.35rem;
+      top: 0.65rem;
+      width: 6px;
+      height: 6px;
+      border-radius: 9999px;
+      background-color: #10B981;
+    }
+  </style>
+</head>
+
+<body class="bg-bto-paper dark:bg-bto-dark text-slate-900 dark:text-slate-100 min-h-full flex flex-col font-sans antialiased selection:bg-emerald-500 selection:text-white transition-colors duration-200">
+
+  <!-- ===================================================================== -->
+  <!-- MENÚ LATERAL IZQUIERDO (DRAWER HAMBURGUESA: ESCALAS, STATS, RANGOS)   -->
+  <!-- ===================================================================== -->
+  <div id="left-drawer-backdrop" class="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm hidden opacity-0 transition-opacity duration-200"></div>
+  
+  <aside id="left-drawer" class="fixed top-0 left-0 bottom-0 z-50 w-80 max-w-[85vw] bg-white dark:bg-bto-panel border-r border-slate-200 dark:border-slate-800 shadow-2xl transform -translate-x-full transition-transform duration-300 ease-out flex flex-col justify-between overflow-y-auto">
+    <div class="p-5 space-y-6">
+      
+      <!-- Cabecera del Drawer -->
+      <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-4">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white shadow-md shadow-emerald-500/20">
+            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+          </div>
+          <div>
+            <span class="font-display font-bold text-base text-slate-900 dark:text-white block leading-none">Panel Clínico</span>
+            <span class="font-mono text-[11px] text-emerald-600 dark:text-emerald-400">HERRAMIENTAS & TELEMETRÍA</span>
+          </div>
+        </div>
+        <button id="btn-close-drawer" class="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white flex items-center justify-center">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <!-- Tarjeta de Sesión del Usuario en Drawer -->
+      <div class="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 space-y-3">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-500 flex items-center justify-center shrink-0">
+            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          </div>
+          <div class="min-w-0 flex-1">
+            <div id="drawer-user-name" class="font-display font-bold text-sm text-slate-900 dark:text-white truncate">Médico en Guardia</div>
+            <div id="drawer-user-status" class="font-mono text-xs text-slate-500 dark:text-slate-400 truncate">Guardado automático activo</div>
+          </div>
+        </div>
+        <button id="btn-drawer-open-auth" class="bto-btn w-full py-2.5 px-3 rounded-xl bg-white dark:bg-slate-800 text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400 flex items-center justify-center gap-2">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+          <span id="drawer-auth-btn-label">Iniciar Sesión / Sincronizar</span>
+        </button>
+      </div>
+
+      <!-- Módulos Alojados en el Menú Hamburguesa -->
+      <div class="space-y-1.5">
+        <span class="px-2 font-mono text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-2">Módulos Clínicos y Métricas</span>
+
+        <!-- Volver al Modo Principal -->
+        <button id="btn-drawer-go-home" type="button" class="w-full p-3.5 rounded-2xl text-left flex items-center gap-3.5 hover:bg-slate-100 dark:hover:bg-slate-800/70 transition-colors group">
+          <div class="w-10 h-10 rounded-xl bg-teal-500/10 text-teal-500 border border-teal-500/20 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/></svg>
+          </div>
+          <div>
+            <div class="font-display font-bold text-sm text-slate-900 dark:text-white">Simulador / Modo Estudio</div>
+            <div class="text-xs text-slate-500 dark:text-slate-400">Volver al panel principal</div>
+          </div>
+        </button>
+
+        <!-- Escalas MSP -->
+        <button data-tab-target="calculadoras" class="drawer-nav-item w-full p-3.5 rounded-2xl text-left flex items-center gap-3.5 hover:bg-slate-100 dark:hover:bg-slate-800/70 transition-colors group">
+          <div class="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="16" y1="14" x2="16" y2="18"/><path d="M16 10h.01M12 10h.01M8 10h.01M12 14h.01M8 14h.01M12 18h.01M8 18h.01"/></svg>
+          </div>
+          <div>
+            <div class="font-display font-bold text-sm text-slate-900 dark:text-white">Escalas Clínicas MSP</div>
+            <div class="text-xs text-slate-500 dark:text-slate-400">Score MAMÁ, AIEPI, Alvarado, CURB-65</div>
+          </div>
+        </button>
+
+        <!-- Estadísticas / Stats -->
+        <button data-tab-target="analitica" class="drawer-nav-item w-full p-3.5 rounded-2xl text-left flex items-center gap-3.5 hover:bg-slate-100 dark:hover:bg-slate-800/70 transition-colors group">
+          <div class="w-10 h-10 rounded-xl bg-sky-500/10 text-sky-500 border border-sky-500/20 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          </div>
+          <div>
+            <div class="font-display font-bold text-sm text-slate-900 dark:text-white">Estadísticas (Stats)</div>
+            <div class="text-xs text-slate-500 dark:text-slate-400">Radar EHEP, precisión e historial</div>
+          </div>
+        </button>
+
+        <!-- Jerarquía de Rangos -->
+        <button id="btn-drawer-open-ranks" type="button" class="w-full p-3.5 rounded-2xl text-left flex items-center gap-3.5 hover:bg-slate-100 dark:hover:bg-slate-800/70 transition-colors group">
+          <div class="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-500 border border-amber-500/20 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+          </div>
+          <div>
+            <div class="font-display font-bold text-sm text-slate-900 dark:text-white">Rangos Clínicos (5 Niveles)</div>
+            <div class="text-xs text-slate-500 dark:text-slate-400">Escalafón médico y puntos XP</div>
+          </div>
+        </button>
+
+        <!-- Matriz Oficial CACES -->
+        <button id="btn-drawer-open-syllabus" type="button" class="w-full p-3.5 rounded-2xl text-left flex items-center gap-3.5 hover:bg-slate-100 dark:hover:bg-slate-800/70 transition-colors group">
+          <div class="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-500 border border-purple-500/20 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          </div>
+          <div>
+            <div class="font-display font-bold text-sm text-slate-900 dark:text-white">Matriz & Glosario EHEP</div>
+            <div class="text-xs text-slate-500 dark:text-slate-400">Ponderación oficial y acrónimos</div>
+          </div>
+        </button>
+      </div>
+
+      <!-- SECCIÓN EXCLUSIVA DE ADMINISTRADOR (OCULTA AL PÚBLICO) -->
+      <div id="admin-only-controls" class="hidden pt-4 border-t border-slate-200 dark:border-slate-800 space-y-2">
+        <div class="flex items-center justify-between px-2">
+          <span class="font-mono text-[11px] font-bold uppercase tracking-wider text-rose-500">Modo Creador / Admin</span>
+          <span class="px-2 py-0.5 rounded bg-rose-500/15 text-rose-500 font-mono text-[10px] font-bold">DESBLOQUEADO</span>
+        </div>
+        <button data-tab-target="importar" class="drawer-nav-item w-full p-3 rounded-xl text-left flex items-center gap-3 bg-slate-100 dark:bg-slate-900 hover:border-emerald-500 border border-transparent text-xs font-mono font-bold">
+          <svg class="w-4 h-4 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <span>Inyectar Banco de Preguntas</span>
+        </button>
+        <button data-tab-target="nube" class="drawer-nav-item w-full p-3 rounded-xl text-left flex items-center gap-3 bg-slate-100 dark:bg-slate-900 hover:border-sky-500 border border-transparent text-xs font-mono font-bold">
+          <svg class="w-4 h-4 text-sky-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>
+          <span>Configuración Supabase (Nube)</span>
+          <span id="cloud-status-dot" class="w-2 h-2 rounded-full bg-amber-500 ml-auto"></span>
+          <span id="cloud-status-text" class="hidden">LOCAL</span>
+        </button>
+        <button id="btn-quick-clear-db" class="hidden"></button>
+      </div>
+
+    </div>
+
+    <div class="p-5 border-t border-slate-200 dark:border-slate-800 text-xs font-mono text-slate-400 flex items-center justify-between">
+      <span>JHOJANN DEMERA</span>
+      <span id="total-questions-badge" class="text-emerald-500 font-bold">0 ITEMS</span>
+    </div>
+  </aside>
+
+  <!-- ===================================================================== -->
+  <!-- HEADER EJECUTIVO PRINCIPAL                                            -->
+  <!-- ===================================================================== -->
+  <header class="bg-white/90 dark:bg-bto-panel/90 backdrop-blur-xl border-b border-slate-200/80 dark:border-slate-800/80 sticky top-0 z-40">
+    <div class="max-w-[1440px] mx-auto px-3 sm:px-6 lg:px-8">
+      
+      <!-- NIVEL 1: Botón Hamburguesa + Identidad + Dial + Rango + Perfil -->
+      <div class="py-2.5 sm:py-3 flex items-center justify-between gap-2">
+        
+        <!-- Izquierda: Botón Hamburguesa + Identidad de Marca -->
+        <div class="flex items-center gap-2 sm:gap-3 shrink-0">
+          <button id="btn-open-drawer" type="button" class="bto-btn w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-100 dark:bg-slate-900 flex items-center justify-center text-slate-700 dark:text-slate-200" title="Abrir Menú de Escalas, Estadísticas y Rangos">
+            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+
+          <div id="brand-logo-trigger" class="flex items-center gap-2.5 cursor-pointer select-none" title="EL HPTA CACES">
+            <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white shadow-lg shadow-emerald-500/20">
+              <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+            </div>
+            <div>
+              <div class="flex items-center gap-2">
+                <h1 class="font-display font-bold text-base sm:text-xl tracking-tight text-slate-900 dark:text-white">
+                  EL HPTA <span class="text-emerald-600 dark:text-emerald-400">CACES</span>
+                </h1>
+                <span class="hidden md:inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                  EHEP.EC
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Centro: DIAL INTERACTIVO (MODO SIMULADOR vs MODO ESTUDIO) -->
+        <div class="hidden lg:flex items-center">
+          <div id="header-mode-dial" class="mode-dial-wrapper" data-active-mode="simulacro">
+            <div class="mode-dial-pill"></div>
+            <button type="button" data-dial-mode="simulacro" class="mode-dial-btn px-5 py-1.5 rounded-xl font-display font-bold text-xs sm:text-sm flex items-center justify-center gap-2 text-slate-950">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+              <span>Modo Simulador</span>
+            </button>
+            <button type="button" data-dial-mode="estudio" class="mode-dial-btn px-5 py-1.5 rounded-xl font-display font-bold text-xs sm:text-sm flex items-center justify-center gap-2 text-slate-600 dark:text-slate-300">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+              <span>Modo Estudio</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Derecha: Rango Clínico + Botón Perfil + Sonido + Tema -->
+        <div class="flex items-center gap-1.5 sm:gap-2">
+          
+          <!-- Badge de Rango Clínico (Abre modal explicativo de los 5 rangos) -->
+          <button id="user-xp-hud" type="button" class="flex items-center gap-2 sm:gap-3 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-slate-100/90 dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 hover:border-emerald-500/60 transition-colors" title="Ver Jerarquía de Rangos Clínicos">
+            <div class="flex items-center gap-1 font-mono text-xs sm:text-sm font-bold text-amber-500">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+              <span id="hud-streak">0</span>
+            </div>
+            <span class="text-slate-300 dark:text-slate-700 hidden sm:inline">|</span>
+            <div class="flex items-center gap-1.5">
+              <span id="hud-rank-title" class="hidden sm:inline text-xs sm:text-sm font-bold text-slate-800 dark:text-emerald-400">Interno Rotativo</span>
+              <span id="hud-xp-badge" class="font-mono text-[11px] sm:text-xs font-semibold px-2 py-0.5 bg-slate-900 text-white dark:bg-slate-800 dark:text-slate-200 rounded-md">0 XP</span>
+            </div>
+          </button>
+
+          <!-- Botón de Perfil / Iniciar Sesión (Con punto de autoguardado) -->
+          <button id="btn-open-auth-modal" type="button" class="bto-btn px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 text-xs font-semibold flex items-center gap-1.5" title="Cuenta y Guardado Automático en la Nube">
+            <span id="auto-sync-dot" class="w-2 h-2 rounded-full bg-emerald-500"></span>
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            <span id="header-user-label" class="hidden sm:inline max-w-[110px] truncate">Acceder</span>
+          </button>
+
+          <!-- Matriz Oficial CACES -->
+          <button id="btn-open-syllabus-modal" class="bto-btn hidden md:flex px-2.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-200 text-xs font-semibold items-center gap-1.5" title="Ver Matriz Oficial CACES">
+            <svg class="w-4 h-4 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            <span class="hidden xl:inline">Matriz</span>
+          </button>
+
+          <!-- Sonido SFX -->
+          <button id="btn-sfx-toggle" class="bto-btn w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-slate-100 dark:bg-slate-900 flex items-center justify-center text-slate-700 dark:text-slate-200" title="Activar/Silenciar Efectos de Sonido">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+          </button>
+
+          <!-- Tema Claro/Oscuro -->
+          <button id="btn-theme-toggle" class="bto-btn w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-slate-100 dark:bg-slate-900 flex items-center justify-center text-slate-700 dark:text-slate-200" title="Cambiar Tema Claro/Oscuro">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Dial Móvil (Visible en pantallas pequeñas/medianas) -->
+      <div class="lg:hidden py-2 flex justify-center border-t border-slate-200/60 dark:border-slate-800/60">
+        <div id="mobile-mode-dial" class="mode-dial-wrapper w-full max-w-md" data-active-mode="simulacro">
+          <div class="mode-dial-pill"></div>
+          <button type="button" data-dial-mode="simulacro" class="mode-dial-btn py-2 rounded-xl font-display font-bold text-xs flex items-center justify-center gap-1.5 text-slate-950">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/></svg>
+            <span>Modo Simulador</span>
+          </button>
+          <button type="button" data-dial-mode="estudio" class="mode-dial-btn py-2 rounded-xl font-display font-bold text-xs flex items-center justify-center gap-1.5 text-slate-600 dark:text-slate-300">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+            <span>Modo Estudio</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- NIVEL 2: BARRA EXCLUSIVA DEL MODO ESTUDIO (OCULTA EN MODO SIMULADOR) -->
+      <div id="study-mode-navbar" class="hidden py-1.5 sm:py-2 border-t border-slate-200/70 dark:border-slate-800/80">
+        <nav class="grid grid-cols-3 sm:grid-cols-6 gap-1.5 sm:gap-2">
+          <button data-tab-target="simulacro" class="nav-tab-btn nav-tab-active px-2 py-2 sm:px-3.5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold border border-transparent text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 flex items-center justify-center gap-2 transition-all">
+            <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+            <span class="truncate">Tutor Clínico</span>
+          </button>
+          <button data-tab-target="temario" class="nav-tab-btn px-2 py-2 sm:px-3.5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold border border-transparent text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 flex items-center justify-center gap-2 transition-all">
+            <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>
+            <span class="truncate">Temario</span>
+          </button>
+          <button data-tab-target="explorador" class="nav-tab-btn px-2 py-2 sm:px-3.5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold border border-transparent text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 flex items-center justify-center gap-2 transition-all">
+            <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <span class="truncate">Explorador</span>
+          </button>
+          <button data-tab-target="flashcards" class="nav-tab-btn px-2 py-2 sm:px-3.5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold border border-transparent text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 flex items-center justify-center gap-2 transition-all">
+            <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 10h20"/></svg>
+            <span class="truncate">Cards</span>
+          </button>
+          <button data-tab-target="errores" class="nav-tab-btn px-2 py-2 sm:px-3.5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold border border-transparent text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 flex items-center justify-center gap-2 transition-all">
+            <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            <span class="truncate">Morgue</span>
+          </button>
+          <button data-tab-target="arcade" class="nav-tab-btn px-2 py-2 sm:px-3.5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold border border-transparent text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 flex items-center justify-center gap-2 transition-all">
+            <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 12h4m-2-2v4m7-1h.01M18 11h.01"/></svg>
+            <span class="truncate">Arcade</span>
+          </button>
+          <button data-tab-target="estudio" class="hidden"></button>
+        </nav>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- ===================================================================== -->
+  <!-- WORKSPACE PRINCIPAL                                                   -->
+  <!-- ===================================================================== -->
+  <main class="flex-1 max-w-[1440px] w-full mx-auto p-4 sm:p-6 lg:p-8">
+
+    <!-- =================================================================== -->
+    <!-- TAB 1: SIMULADOR / MODO ESTUDIO (DIFERENCIADOS POR EL DIAL)         -->
+    <!-- =================================================================== -->
+    <section id="tab-simulacro" class="tab-content">
+      
+      <!-- SCREEN 1A: Panel de Configuración -->
+      <div id="exam-setup-screen" class="max-w-6xl mx-auto py-2 space-y-6">
+        
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          
+          <!-- Panel Principal (8 cols) -->
+          <div class="lg:col-span-8 bto-card rounded-3xl bg-white dark:bg-bto-panel p-7 sm:p-10 flex flex-col justify-between relative overflow-hidden">
+            
+            <!-- SUB-PANEL A: MODO SIMULADOR (SOLO SIMULACIÓN DEL EXAMEN REAL) -->
+            <div id="setup-panel-simulacro" class="space-y-6 flex-1 flex flex-col justify-between">
+              <div class="space-y-5">
+                <div class="inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 font-mono text-xs sm:text-sm font-semibold uppercase tracking-wider">
+                  <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+                  <span>Modo Simulador Oficial EHEP</span>
+                </div>
+                
+                <h2 class="font-display text-3xl sm:text-5xl font-extrabold tracking-tight text-slate-900 dark:text-white leading-[1.15]">
+                  El lugar correcto si quieres pasar el <span class="text-transparent bg-clip-text bg-gradient-to-r from-emerald-500 to-cyan-500">Hpta CACES</span>.
+                </h2>
+                
+                <p class="text-slate-600 dark:text-slate-300 text-base sm:text-lg max-w-2xl leading-relaxed">
+                  Simulación estricta bajo presión de tiempo real. Escoge cuántas preguntas vas a resolver y si deseas evaluar todas las áreas ponderadas como en el examen oficial o una especialidad específica.
+                </p>
+              </div>
+
+              <div class="pt-6 mt-6 border-t border-slate-200 dark:border-slate-800 space-y-4">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label class="font-mono text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block mb-2">
+                      Área o Especialidad a Evaluar:
+                    </label>
+                    <select id="caces-specialty-select" class="w-full p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 font-sans font-bold text-sm sm:text-base text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500 cursor-pointer">
+                      <option value="Todas" selected>Todas las áreas (Examen Real Ponderado)</option>
+                      <option value="Medicina Interna">1. Medicina Interna (26%)</option>
+                      <option value="Pediatría">2. Pediatría (21%)</option>
+                      <option value="Ginecología y Obstetricia">3. Ginecología y Obstetricia (17%)</option>
+                      <option value="Cirugía">4. Cirugía (14%)</option>
+                      <option value="Salud Mental">5. Salud Mental (8%)</option>
+                      <option value="Salud Pública">6. Salud Pública (8%)</option>
+                      <option value="Bioética">7. Bioética (6%)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label class="font-mono text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block mb-2">
+                      Cantidad de Preguntas:
+                    </label>
+                    <select id="caces-q-count" class="w-full p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 font-sans font-bold text-sm sm:text-base text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500 cursor-pointer">
+                      <option value="100" selected>100 Preguntas (Examen Oficial • 3h)</option>
+                      <option value="50">50 Preguntas (Media Guardia • 1h 30m)</option>
+                      <option value="25">25 Preguntas (Sprint Clínico • 45m)</option>
+                      <option value="10">10 Preguntas (Flash Express • 18m)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <button id="btn-start-caces" class="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-display font-bold text-base sm:text-lg tracking-wide shadow-lg shadow-emerald-500/25 transition-all transform hover:-translate-y-0.5 flex items-center justify-center gap-3">
+                  <span>Iniciar Simulacro Ahora</span>
+                  <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+                </button>
+              </div>
+            </div>
+
+            <!-- SUB-PANEL B: MODO ESTUDIO / TUTOR (CON ACCESO A TODA LA SUITE) -->
+            <div id="setup-panel-estudio" class="hidden space-y-6 flex-1 flex flex-col justify-between">
+              <div class="space-y-5">
+                <div class="inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-full bg-sky-500/10 border border-sky-500/30 text-sky-700 dark:text-sky-300 font-mono text-xs sm:text-sm font-semibold uppercase tracking-wider">
+                  <span class="w-2 h-2 rounded-full bg-sky-500 animate-ping"></span>
+                  <span>Modo Estudio // Suite Completa Desbloqueada</span>
+                </div>
+                
+                <h2 class="font-display text-3xl sm:text-5xl font-extrabold tracking-tight text-slate-900 dark:text-white leading-[1.15]">
+                  Tus <span class="text-transparent bg-clip-text bg-gradient-to-r from-sky-400 to-emerald-400">1000 puntos asegurados</span> en el CACES.
+                </h2>
+                
+                <p class="text-slate-600 dark:text-slate-300 text-base sm:text-lg max-w-2xl leading-relaxed">
+                  Entrena con retroalimentación clínica instantánea, perlas del MSP, explicación puntual si eliges un distractor, Flashcards, Temario, La Morgue y Guardia Arcade.
+                </p>
+              </div>
+
+              <div class="pt-6 mt-6 border-t border-slate-200 dark:border-slate-800 space-y-4">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label class="block font-mono text-xs font-bold uppercase text-slate-500 dark:text-slate-400 mb-2">Componente Oficial:</label>
+                    <select id="study-specialty-select" class="w-full p-4 rounded-2xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-sm sm:text-base font-bold">
+                      <option value="Todas">Todas las áreas (Ponderadas CACES)</option>
+                      <option value="Medicina Interna">1. Medicina Interna (26%)</option>
+                      <option value="Pediatría">2. Pediatría (21%)</option>
+                      <option value="Ginecología y Obstetricia">3. Ginecología y Obstetricia (17%)</option>
+                      <option value="Cirugía">4. Cirugía (14%)</option>
+                      <option value="Salud Mental">5. Salud Mental (8%)</option>
+                      <option value="Salud Pública">6. Salud Pública (8%)</option>
+                      <option value="Bioética">7. Bioética (6%)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block font-mono text-xs font-bold uppercase text-slate-500 dark:text-slate-400 mb-2">Cantidad de Casos:</label>
+                    <select id="study-q-count" class="w-full p-4 rounded-2xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-sm sm:text-base font-bold">
+                      <option value="20" selected>20 preguntas (Guardia Corta)</option>
+                      <option value="10">10 preguntas (Sprint Express)</option>
+                      <option value="50">50 preguntas (Bloque Profundo)</option>
+                      <option value="100">100 preguntas (Maratón Clínico)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <button id="btn-start-study" class="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-sky-500 to-emerald-500 hover:from-sky-600 hover:to-emerald-600 text-white font-display font-bold text-base sm:text-lg tracking-wide shadow-lg shadow-sky-500/25 transition-all flex items-center justify-center gap-3">
+                  <span>Iniciar Práctica en Modo Estudio</span>
+                  <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+                </button>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Columna Lateral (4 cols) -->
+          <div class="lg:col-span-4 flex flex-col gap-6">
+            
+            <!-- Parámetros Oficiales -->
+            <div class="bto-card rounded-3xl bg-slate-900 text-white p-7 space-y-5 flex-1 flex flex-col justify-between border border-slate-800">
+              <div class="flex items-center justify-between border-b border-slate-800 pb-3.5">
+                <span class="font-mono text-xs sm:text-sm uppercase tracking-wider text-slate-400">Parámetros EHEP</span>
+                <span class="font-mono text-xs sm:text-sm text-emerald-400 font-bold">ESTÁNDAR CACES</span>
+              </div>
+              <div class="grid grid-cols-2 gap-4 my-auto">
+                <div class="p-4 rounded-2xl bg-slate-800/70 border border-slate-700/80">
+                  <span class="font-mono text-xs text-slate-400 uppercase block mb-1">Duración</span>
+                  <span id="caces-duration-label" class="font-display text-2xl font-bold text-white block">3 Horas</span>
+                  <span class="font-mono text-xs text-emerald-400 mt-1 block">108 seg / reactivo</span>
+                </div>
+                <div class="p-4 rounded-2xl bg-slate-800/70 border border-slate-700/80">
+                  <span class="font-mono text-xs text-slate-400 uppercase block mb-1">Aprobación</span>
+                  <span class="font-display text-2xl font-bold text-emerald-400 block">≥ 60%</span>
+                  <span class="font-mono text-xs text-slate-300 mt-1 block">≥ 700 / 1000 pts</span>
+                </div>
+              </div>
+              <button id="btn-hero-open-syllabus" class="w-full py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-sans text-sm font-semibold border border-slate-700 transition-colors flex items-center justify-between">
+                <span>Consultar Matriz y Ponderación</span>
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/></svg>
+              </button>
+            </div>
+
+            <!-- Tarjeta Lateral Modo Simulador: Condiciones Reales -->
+            <div id="setup-side-simulacro-info" class="bto-card rounded-3xl bg-white dark:bg-bto-panel p-6 border border-slate-200 dark:border-slate-800 space-y-2.5">
+              <div class="flex items-center justify-between">
+                <span class="font-mono text-xs uppercase tracking-wider px-2.5 py-1 rounded-md bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-bold">Condiciones Oficiales</span>
+                <svg class="w-5 h-5 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              </div>
+              <h3 class="font-display font-bold text-lg text-slate-900 dark:text-white">Examen Cerrado Sin Pistas</h3>
+              <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+                En Modo Simulador las respuestas y perlas permanecen ocultas hasta finalizar el intento. Para usar Cards, Temario, Morgue o Arcade, gira el dial superior a <b>Modo Estudio</b>.
+              </p>
+            </div>
+
+            <!-- Tarjeta Lateral Modo Estudio: Acceso Destacado al Arcade (Oculta en Modo Simulador) -->
+            <div id="setup-arcade-promo-card" onclick="document.querySelector('[data-tab-target=arcade]').click()" class="hidden bto-card rounded-3xl bg-gradient-to-br from-slate-900 via-slate-900 to-rose-950 text-white p-6 cursor-pointer hover:border-rose-500/50 transition-all group">
+              <div class="flex items-center justify-between">
+                <span class="font-mono text-xs uppercase tracking-wider px-2.5 py-1 rounded-md bg-rose-500/20 text-rose-300 border border-rose-500/30 font-semibold">Entrenamiento Visual</span>
+                <svg class="w-6 h-6 text-rose-400 group-hover:scale-110 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 12h4m-2-2v4m7-1h.01M18 11h.01"/></svg>
+              </div>
+              <h3 class="font-display font-bold text-xl mt-3 text-white">Guardia Arcade</h3>
+              <p class="text-sm text-slate-300 mt-1 leading-relaxed">Entrena reflejos diagnósticos, estabiliza pacientes en UCI y domina fármacos bajo presión.</p>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Distribución de los 7 Componentes Oficiales -->
+        <div class="bto-card rounded-3xl bg-white dark:bg-bto-panel p-6 sm:p-7">
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+            <span class="font-display text-sm sm:text-base font-bold text-slate-700 dark:text-slate-200">Ponderación Oficial del Examen (7 Componentes Troncales)</span>
+            <span class="font-mono text-xs sm:text-sm font-bold text-emerald-600 dark:text-emerald-400">100% EHEP ECUADOR</span>
+          </div>
+          <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+            <div class="p-4 rounded-2xl bg-blue-500/10 border border-blue-500/25">
+              <span class="font-mono text-xl font-bold text-blue-600 dark:text-blue-400 block">26%</span>
+              <span class="font-sans font-semibold text-slate-800 dark:text-slate-200 text-sm mt-0.5 block">Med. Interna</span>
+            </div>
+            <div class="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/25">
+              <span class="font-mono text-xl font-bold text-emerald-600 dark:text-emerald-400 block">21%</span>
+              <span class="font-sans font-semibold text-slate-800 dark:text-slate-200 text-sm mt-0.5 block">Pediatría</span>
+            </div>
+            <div class="p-4 rounded-2xl bg-purple-500/10 border border-purple-500/25">
+              <span class="font-mono text-xl font-bold text-purple-600 dark:text-purple-400 block">17%</span>
+              <span class="font-sans font-semibold text-slate-800 dark:text-slate-200 text-sm mt-0.5 block">Gíneco-Obst.</span>
+            </div>
+            <div class="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/25">
+              <span class="font-mono text-xl font-bold text-amber-600 dark:text-amber-400 block">14%</span>
+              <span class="font-sans font-semibold text-slate-800 dark:text-slate-200 text-sm mt-0.5 block">Cirugía</span>
+            </div>
+            <div class="p-4 rounded-2xl bg-indigo-500/10 border border-indigo-500/25">
+              <span class="font-mono text-xl font-bold text-indigo-600 dark:text-indigo-400 block">8%</span>
+              <span class="font-sans font-semibold text-slate-800 dark:text-slate-200 text-sm mt-0.5 block">Salud Mental</span>
+            </div>
+            <div class="p-4 rounded-2xl bg-teal-500/10 border border-teal-500/25">
+              <span class="font-mono text-xl font-bold text-teal-600 dark:text-teal-400 block">8%</span>
+              <span class="font-sans font-semibold text-slate-800 dark:text-slate-200 text-sm mt-0.5 block">Salud Pública</span>
+            </div>
+            <div class="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/25">
+              <span class="font-mono text-xl font-bold text-rose-600 dark:text-rose-400 block">6%</span>
+              <span class="font-sans font-semibold text-slate-800 dark:text-slate-200 text-sm mt-0.5 block">Bioética</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- SCREEN 1B: Examen / Tutor Activo -->
+      <div id="exam-active-screen" class="hidden">
+        
+        <!-- Banner de Modo Auditoría -->
+        <div id="exam-review-banner" class="hidden mb-5 p-4 sm:p-5 rounded-2xl bg-amber-500/15 border border-amber-500/40 flex flex-wrap items-center justify-between gap-4">
+          <div class="flex items-center gap-3 text-amber-900 dark:text-amber-200 font-semibold text-base">
+            <svg class="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <span>Modo Auditoría Post-Examen: Revisando claves oficiales y justificaciones clínicas.</span>
+          </div>
+          <div class="flex items-center gap-2.5">
+            <button id="btn-review-filter-all" class="px-4 py-2 rounded-xl text-sm font-semibold bg-amber-500 text-slate-950">Todas</button>
+            <button id="btn-review-filter-wrong" class="px-4 py-2 rounded-xl text-sm font-semibold bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-200 hover:bg-rose-500 hover:text-white transition-colors">Solo Falladas</button>
+            <button id="btn-review-exit" class="px-4 py-2 rounded-xl text-sm font-semibold bg-slate-900 text-white dark:bg-white dark:text-slate-900">Volver al Informe</button>
+          </div>
+        </div>
+
+        <!-- Barra de Telemetría del Examen -->
+        <div class="bto-card flex flex-wrap items-center justify-between gap-4 mb-5 p-4 sm:p-5 rounded-2xl bg-white dark:bg-bto-panel">
+          <div class="flex flex-wrap items-center gap-3">
+            <span id="exam-mode-badge" class="px-3 py-1 rounded-lg bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 font-mono text-xs sm:text-sm font-bold uppercase">Simulacro</span>
+            <span id="exam-progress-text" class="font-mono font-bold text-base sm:text-lg text-slate-900 dark:text-white">ÍTEM 1 / 100</span>
+            <span id="q-specialty-badge" class="px-3 py-1 rounded-lg bg-sky-500/10 text-sky-700 dark:text-sky-300 border border-sky-500/25 text-xs sm:text-sm font-semibold">Medicina Interna</span>
+            <span id="q-subtema-badge" class="text-sm font-medium text-slate-500 dark:text-slate-400 hidden md:inline"></span>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-3">
+            <div class="flex items-center gap-2 px-4 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+              <span class="text-xs font-mono text-slate-500 uppercase">TIEMPO:</span>
+              <span id="exam-timer" class="font-mono font-bold text-lg sm:text-xl text-slate-900 dark:text-emerald-400">03:00:00</span>
+            </div>
+
+            <button id="btn-open-ai-tutor-top" type="button" class="bto-btn px-4 py-2 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 text-sky-700 dark:text-sky-300 border border-sky-500/30 font-semibold text-sm flex items-center gap-2" title="Consultar al Tutor Clínico IA">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" y1="16" x2="8" y2="16"/><line x1="16" y1="16" x2="16" y2="16"/></svg>
+              <span class="hidden sm:inline">Interconsulta IA</span>
+            </button>
+
+            <button id="btn-mark-q" class="bto-btn px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-900 text-sm font-semibold flex items-center gap-1.5">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>
+              <span class="hidden sm:inline">Marcar Duda</span>
+            </button>
+
+            <button id="btn-finish-exam" class="bto-btn px-4 py-2 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-sm font-bold border-transparent">
+              Finalizar Guardia
+            </button>
+          </div>
+        </div>
+
+        <!-- Barra de Progreso -->
+        <div class="w-full bg-slate-200 dark:bg-slate-800/90 h-2.5 rounded-full mb-6 overflow-hidden">
+          <div id="exam-progress-bar" class="bg-gradient-to-r from-emerald-500 to-cyan-500 h-full transition-all duration-300" style="width: 1%"></div>
+        </div>
+
+        <!-- Layout de 2 Columnas -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          
+          <!-- Columna 1: Caso Clínico, Opciones y Justificación (9 cols) -->
+          <div class="lg:col-span-9 space-y-6">
+            <div class="bto-card p-4 sm:p-8 rounded-3xl bg-white dark:bg-bto-panel space-y-5">
+              
+              <!-- Enunciado del Caso Clínico -->
+              <div class="space-y-3">
+                <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 pb-3">
+                  <span class="font-mono text-xs sm:text-sm font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Presentación del Caso Clínico</span>
+                  <span class="font-mono text-xs text-slate-400">PROTOCOLO EHEP-MSP</span>
+                </div>
+                <div id="q-enunciado" class="clinical-prose text-sm sm:text-base text-slate-800 dark:text-slate-100 font-normal">
+                  Cargando caso clínico...
+                </div>
+              </div>
+
+              <!-- Pregunta Directa -->
+              <div class="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/90 border-l-4 border-emerald-500 font-bold text-sm sm:text-base text-slate-900 dark:text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div id="q-pregunta" class="clinical-prose flex-1">¿Cuál es la conducta diagnóstica o terapéutica de elección?</div>
+                <button id="btn-open-ai-tutor-inline" type="button" class="btn-trigger-ai-tutor px-3.5 py-2 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 text-sky-700 dark:text-sky-300 border border-sky-500/30 text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all shrink-0">
+                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/></svg>
+                  <span>Consultar Tutor IA</span>
+                </button>
+              </div>
+
+              <!-- Opciones de Respuesta (A, B, C, D) -->
+              <div id="q-options-container" class="space-y-3.5"></div>
+
+              <!-- Panel de Justificación Clínica y Auditoría Inteligente del Distractor Elegido -->
+              <div id="q-justification-box" class="hidden p-4 sm:p-6 rounded-2xl bg-slate-50/90 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 space-y-4">
+                
+                <div class="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
+                  <div class="flex items-center gap-3">
+                    <span class="text-emerald-700 dark:text-emerald-400 font-mono font-bold text-base flex items-center gap-2">
+                      <svg class="w-5 h-5 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                      <span>CLAVE OFICIAL:</span>
+                      <span id="q-correct-letter" class="px-3 py-1 rounded-xl bg-emerald-500 text-slate-950 font-mono font-black text-base">A</span>
+                    </span>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-2.5">
+                    <button id="btn-ai-generate-breakdown" type="button" class="bto-btn px-4 py-2 rounded-xl bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-semibold text-sm flex items-center gap-2">
+                      <svg class="w-4 h-4 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                      <span>Auditar con IA</span>
+                    </button>
+                    <button id="btn-open-ai-tutor" type="button" class="bto-btn px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-sm flex items-center gap-2 border-transparent">
+                      <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                      <span>Debatir Caso</span>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Perla Clínica CACES -->
+                <div id="q-perla-box" class="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-1.5">
+                  <div class="flex items-center gap-2 font-mono text-xs font-bold uppercase text-amber-700 dark:text-amber-300">
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+                    <span>Perla CACES de Alto Rendimiento:</span>
+                  </div>
+                  <div id="q-perla-text" class="clinical-prose text-sm sm:text-base text-slate-800 dark:text-slate-100 font-medium"></div>
+                  <div id="q-fuente-text" class="font-mono text-xs font-semibold text-slate-500 dark:text-slate-400 pt-0.5"></div>
+                </div>
+
+                <!-- Fundamento Fisiopatológico (colapsable) -->
+                <div class="space-y-1.5">
+                  <button type="button" id="btn-toggle-justification" onclick="(function(){var el=document.getElementById('q-justification-detail');var arrow=document.getElementById('arrow-justification');var hidden=el.classList.toggle('hidden');arrow.textContent=hidden?'+':'−';})()" class="w-full flex items-center justify-between gap-2 text-left hover:opacity-80 transition-opacity py-1">
+                    <span class="font-mono text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                      <svg class="w-4 h-4 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                      <span>Ver justificación fisiopatológica completa</span>
+                    </span>
+                    <span id="arrow-justification" class="font-mono text-sm font-bold text-slate-400">+</span>
+                  </button>
+                  <div id="q-justification-detail" class="hidden pt-1">
+                    <div id="q-justification-text" class="clinical-prose text-sm text-slate-700 dark:text-slate-300"></div>
+                  </div>
+                </div>
+
+                <!-- Auditoría Focalizada del Distractor Seleccionado -->
+                <div id="q-distractors-container" class="hidden space-y-3 pt-4 border-t border-slate-200 dark:border-slate-800">
+                  <span id="q-distractors-title" class="font-mono text-xs sm:text-sm font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 flex items-center gap-2">
+                    <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                    <span>Por qué tu opción seleccionada es incorrecta:</span>
+                  </span>
+                  <div id="q-distractors-list" class="grid grid-cols-1 gap-3 pt-1"></div>
+                </div>
+              </div>
+
+              <!-- Pie de Navegación entre Preguntas -->
+              <div class="flex items-center justify-between pt-5 border-t border-slate-200 dark:border-slate-800">
+                <button id="btn-prev-q" class="bto-btn px-6 py-3 rounded-xl bg-slate-100 dark:bg-slate-900 text-base font-bold">
+                  ← Anterior
+                </button>
+                <div class="font-mono text-xs sm:text-sm text-slate-400 hidden md:block">
+                  Atajos: <kbd class="px-2 py-1 rounded bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200">A-D</kbd> responder • <kbd class="px-2 py-1 rounded bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200">←/→</kbd> navegar
+                </div>
+                <button id="btn-next-q" class="bto-btn px-7 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 text-base font-bold border-transparent">
+                  Siguiente →
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Columna 2: Mapa de Guardia (3 cols) -->
+          <div class="lg:col-span-3">
+            <div class="bto-card p-4 rounded-3xl bg-white dark:bg-bto-panel sticky top-28 sm:top-32 space-y-4">
+              <div class="flex items-center justify-between">
+                <h3 class="font-display text-base font-bold text-slate-900 dark:text-white">Mapa de Reactivos</h3>
+                <span id="matrix-answered-count" class="font-mono text-sm font-bold text-emerald-600 dark:text-emerald-400">0/100</span>
+              </div>
+              
+              <div class="grid grid-cols-2 gap-2.5 text-xs font-mono text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800 pb-4">
+                <div class="flex items-center gap-2"><span class="w-3.5 h-3.5 rounded bg-emerald-500"></span> Actual</div>
+                <div class="flex items-center gap-2"><span class="w-3.5 h-3.5 rounded bg-emerald-500/30 border border-emerald-500/50"></span> Respondida</div>
+                <div class="flex items-center gap-2"><span class="w-3.5 h-3.5 rounded bg-amber-400"></span> En Duda</div>
+                <div class="flex items-center gap-2"><span class="w-3.5 h-3.5 rounded bg-slate-200 dark:bg-slate-800"></span> Pendiente</div>
+              </div>
+
+              <div id="exam-matrix-grid" class="grid grid-cols-5 gap-2 max-h-96 overflow-y-auto pr-1 font-mono"></div>
+
+              <div class="pt-2">
+                <button id="btn-jump-unanswered" class="bto-btn w-full py-2.5 px-4 rounded-xl bg-slate-100 dark:bg-slate-900 font-sans text-sm font-semibold">
+                  Ir a primera sin responder
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SCREEN 1C: Informe de Resultados -->
+      <div id="exam-results-screen" class="hidden max-w-4xl mx-auto py-6">
+        <div class="bto-card bg-white dark:bg-bto-panel rounded-3xl p-8 sm:p-12 space-y-8">
+          
+          <div class="text-center space-y-4">
+            <span id="res-status-badge" class="inline-block px-5 py-2 rounded-full font-mono text-sm font-bold uppercase bg-emerald-500/15 text-emerald-400">
+              Veredicto Oficial EHEP
+            </span>
+            <h2 class="font-display text-3xl sm:text-4xl font-extrabold tracking-tight">Informe Final de Guardia</h2>
+            <div class="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-6 py-2">
+              <div class="font-mono text-5xl sm:text-6xl font-black text-emerald-500" id="res-percentage">
+                0%
+              </div>
+              <div class="hidden sm:block text-slate-300 dark:text-slate-700 text-3xl font-light">|</div>
+              <div class="px-5 py-2 rounded-2xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-center">
+                <span class="font-mono text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider block font-bold">Puntaje Escala CACES (Corte: 700)</span>
+                <span id="res-caces-points" class="font-mono text-2xl sm:text-3xl font-black text-amber-500 dark:text-amber-400">0 / 1000 PTS</span>
+              </div>
+            </div>
+            <p class="font-mono text-sm sm:text-base text-slate-500 dark:text-slate-400">
+              Aciertos: <span id="res-score" class="font-bold text-slate-900 dark:text-white">0 / 0</span> • Tiempo invertido: <span id="res-time-spent" class="font-bold text-slate-900 dark:text-white">0 min</span>
+            </p>
+          </div>
+
+          <div class="space-y-4">
+            <h3 class="font-display text-base font-bold text-slate-700 dark:text-slate-300">Desglose por Componente Oficial</h3>
+            <div id="res-specialties-container" class="space-y-3"></div>
+          </div>
+
+          <div class="flex flex-col sm:flex-row items-center gap-4 pt-6 border-t border-slate-200 dark:border-slate-800">
+            <button id="btn-review-exam" class="bto-btn w-full sm:flex-1 py-4 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-sm sm:text-base flex items-center justify-center gap-2 border-transparent">
+              <span>Auditar Respuestas y Claves</span>
+            </button>
+            <button id="btn-restart-exam" class="bto-btn w-full sm:flex-1 py-4 rounded-2xl bg-slate-100 dark:bg-slate-900 font-bold text-sm sm:text-base">
+              Nueva Sesión
+            </button>
+            <button id="btn-results-go-morgue" class="bto-btn w-full sm:flex-1 py-4 rounded-2xl bg-rose-500 hover:bg-rose-600 text-white font-bold text-sm sm:text-base border-transparent">
+              Repasar Errores en Modo Estudio
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- TAB 2: GUARDIA ARCADE (SOLO EN MODO ESTUDIO)                        -->
+    <!-- =================================================================== -->
+    <section id="tab-arcade" class="tab-content hidden">
+      <div class="max-w-6xl mx-auto py-2 space-y-6">
+        
+        <div class="bto-card rounded-3xl bg-slate-900 text-white p-7 sm:p-9 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 border border-slate-800">
+          <div class="space-y-2.5">
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 font-mono text-xs font-bold uppercase">
+              <span>CENTRO DE ENTRENAMIENTO INTERACTIVO</span>
+            </div>
+            <h2 class="font-display text-3xl sm:text-4xl font-extrabold tracking-tight">
+              GUARDIA ARCADE // <span class="text-emerald-400">REFLEJOS CLÍNICOS</span>
+            </h2>
+            <p class="text-sm sm:text-base text-slate-300 max-w-2xl leading-relaxed">
+              Entrena decisiones críticas bajo presión, estabilización hemodinámica y asociación farmacológica rápida.
+            </p>
+          </div>
+
+          <div id="arcade-rank-card-trigger" class="p-5 rounded-2xl bg-slate-800/90 border border-slate-700 hover:border-emerald-500/50 cursor-pointer transition-colors min-w-[260px] space-y-2.5" title="Haz clic para ver los 5 Rangos Clínicos">
+            <div class="flex items-center justify-between text-xs sm:text-sm font-mono">
+              <span class="text-slate-400">RANGO (VER NIVELES):</span>
+              <span id="arcade-rank-badge" class="text-emerald-400 font-bold underline">Interno Rotativo</span>
+            </div>
+            <div class="w-full bg-slate-950 h-3 rounded-full overflow-hidden">
+              <div id="arcade-xp-bar" class="bg-gradient-to-r from-emerald-500 to-cyan-400 h-full transition-all duration-300" style="width: 20%"></div>
+            </div>
+            <div class="flex items-center justify-between text-xs sm:text-sm font-mono text-slate-300">
+              <span>XP Total: <b id="arcade-xp-total" class="text-white">0</b></span>
+              <span>Récord: <b id="arcade-high-score" class="text-sky-400">0</b></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+          <button type="button" data-game-mode="blitz" class="arcade-mode-btn bto-card text-left p-6 rounded-3xl bg-white dark:bg-bto-panel border-2 border-emerald-500 ring-2 ring-emerald-500/20 space-y-2.5">
+            <h3 class="font-display font-bold text-xl">1. Cardio-Shock ECG</h3>
+          </button>
+        </div>
+
+        <div id="arcade-stage" class="bto-card rounded-3xl bg-white dark:bg-bto-panel p-6 sm:p-10 min-h-[460px] flex flex-col justify-between"></div>
+
+      </div>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- TAB 3: ESTUDIO (REDIRIGE AL DIAL PRINCIPAL)                         -->
+    <!-- =================================================================== -->
+    <section id="tab-estudio" class="tab-content hidden"></section>
+
+    <!-- =================================================================== -->
+    <!-- TAB 4: TEMARIO CACES (SOLO EN MODO ESTUDIO)                         -->
+    <!-- =================================================================== -->
+    <section id="tab-temario" class="tab-content hidden">
+      <div class="max-w-7xl mx-auto py-2 space-y-6">
+
+        <div class="bto-card p-7 sm:p-9 rounded-3xl bg-slate-900 text-white relative overflow-hidden border border-slate-800">
+          <div class="relative z-10 max-w-3xl space-y-3.5">
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-mono text-xs font-bold uppercase">
+              <span>MAPA TÁCTICO EHEP • 7 COMPONENTES</span>
+            </div>
+            <h2 class="font-display text-3xl sm:text-4xl font-extrabold tracking-tight">
+              Estudio Quirúrgico por Subtemas y Guías MSP
+            </h2>
+            <p class="text-sm sm:text-base text-slate-300 leading-relaxed">
+              Filtra cualquier patología, escala o fármaco, revisa sus perlas de alto rendimiento y entrena bloques específicos.
+            </p>
+            <div class="pt-2 flex flex-wrap items-center gap-3 text-xs sm:text-sm font-mono">
+              <span id="temario-stat-total-q" class="px-3.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 font-bold text-emerald-400">Cargando...</span>
+              <span class="px-3.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 font-bold">7 Áreas Troncales</span>
+              <span id="temario-stat-subtemas" class="px-3.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 font-bold">Subtemas Clínicos</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="bto-card p-5 sm:p-7 rounded-3xl bg-white dark:bg-bto-panel space-y-5">
+          <div class="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+            <div class="relative flex-1">
+              <span class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
+                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              </span>
+              <input type="text" id="temario-search-input" placeholder="Buscar patología, escala o protocolo (ej: Preeclampsia, Alvarado, AIEPI, SCACEST)..." class="w-full pl-12 pr-4 py-3.5 rounded-2xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-base focus:outline-none focus:border-emerald-500 font-medium">
+            </div>
+            <button id="btn-open-caces-acronyms-hub" type="button" class="bto-btn px-5 py-3.5 rounded-2xl bg-slate-100 dark:bg-slate-900 text-sm font-mono font-bold shrink-0">
+              Glosario Acrónimos MSP
+            </button>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-2 pt-1" id="temario-component-pills">
+            <button class="temario-pill active px-4 py-2 rounded-xl text-xs sm:text-sm font-mono font-bold bg-emerald-500 text-slate-950" data-comp="Todas">Todos (100%)</button>
+            <button class="temario-pill px-4 py-2 rounded-xl text-xs sm:text-sm font-mono font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300" data-comp="Medicina Interna">Med. Interna (26%)</button>
+            <button class="temario-pill px-4 py-2 rounded-xl text-xs sm:text-sm font-mono font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300" data-comp="Pediatría">Pediatría (21%)</button>
+            <button class="temario-pill px-4 py-2 rounded-xl text-xs sm:text-sm font-mono font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300" data-comp="Ginecología y Obstetricia">Gíneco-Obst. (17%)</button>
+            <button class="temario-pill px-4 py-2 rounded-xl text-xs sm:text-sm font-mono font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300" data-comp="Cirugía">Cirugía (14%)</button>
+            <button class="temario-pill px-4 py-2 rounded-xl text-xs sm:text-sm font-mono font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300" data-comp="Salud Mental">Salud Mental (8%)</button>
+            <button class="temario-pill px-4 py-2 rounded-xl text-xs sm:text-sm font-mono font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300" data-comp="Salud Pública">Salud Pública (8%)</button>
+            <button class="temario-pill px-4 py-2 rounded-xl text-xs sm:text-sm font-mono font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300" data-comp="Bioética">Bioética (6%)</button>
+          </div>
+        </div>
+
+        <div id="temario-cards-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+      </div>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- TAB EXPLORADOR: BIBLIOTECA MAESTRA (SOLO EN MODO ESTUDIO)           -->
+    <!-- =================================================================== -->
+    <section id="tab-explorador" class="tab-content hidden">
+      <div class="max-w-7xl mx-auto py-2 space-y-6">
+
+        <div class="bto-card p-7 sm:p-9 rounded-3xl bg-slate-900 text-white relative overflow-hidden border border-slate-800">
+          <div class="relative z-10 max-w-4xl space-y-3.5">
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-mono text-xs font-bold uppercase">
+              <span>BIBLIOTECA MAESTRA // CASOS CLÍNICOS PRO</span>
+            </div>
+            <h2 class="font-display text-3xl sm:text-4xl font-extrabold tracking-tight">
+              Explorador y Buscador Clínico de Guardia
+            </h2>
+            <p class="text-sm sm:text-base text-slate-300 leading-relaxed">
+              Consulta al instante cualquier fármaco, protocolo, escala o patología del banco oficial con fundamentación fisiopatológica y Guías del MSP.
+            </p>
+            <div class="pt-2 flex flex-wrap items-center gap-3 text-xs sm:text-sm font-mono">
+              <span id="exp-stat-total" class="px-3.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 font-bold text-cyan-400">Reactivos</span>
+              <span id="exp-stat-filtered" class="px-3.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 font-bold text-emerald-400">Mostrando todos</span>
+              <button id="btn-export-study-pdf" class="bto-btn ml-auto px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-sans font-bold flex items-center gap-2 border-transparent">
+                <span>Exportar Cuaderno PDF</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="bto-card p-5 sm:p-7 rounded-3xl bg-white dark:bg-bto-panel space-y-4">
+          <div class="flex flex-col md:flex-row items-stretch md:items-center gap-3">
+            <div class="relative flex-1">
+              <span class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
+                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              </span>
+              <input type="text" id="exp-search-input" placeholder="Buscar por fármaco, síntoma, patología, escala o guía (ej: Sulfato de Magnesio, Alvarado, Score MAMÁ)..." class="w-full pl-12 pr-4 py-3.5 rounded-2xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-base focus:outline-none focus:border-cyan-500 font-medium">
+            </div>
+            <select id="exp-status-select" class="p-3.5 rounded-2xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-semibold text-sm">
+              <option value="all">Todos los Estados</option>
+              <option value="unanswered">Solo No Respondidas</option>
+              <option value="errors">Solo en La Morgue (Errores)</option>
+              <option value="correct">Solo Acertadas</option>
+            </select>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-2 pt-1" id="exp-specialty-pills">
+            <button class="exp-pill active px-4 py-2 rounded-xl text-xs sm:text-sm font-mono font-bold bg-cyan-500 text-slate-950" data-spec="Todas">Todas</button>
+            <button class="exp-pill px-4 py-2 rounded-xl text-xs sm:text-sm font-mono font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300" data-spec="Medicina Interna">Med. Interna</button>
+            <button class="exp-pill px-4 py-2 rounded-xl text-xs sm:text-sm font-mono font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300" data-spec="Pediatría">Pediatría</button>
+            <button class="exp-pill px-4 py-2 rounded-xl text-xs sm:text-sm font-mono font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300" data-spec="Ginecología y Obstetricia">Gíneco-Obst.</button>
+            <button class="exp-pill px-4 py-2 rounded-xl text-xs sm:text-sm font-mono font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300" data-spec="Cirugía">Cirugía</button>
+            <button class="exp-pill px-4 py-2 rounded-xl text-xs sm:text-sm font-mono font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300" data-spec="Salud Mental">Salud Mental</button>
+            <button class="exp-pill px-4 py-2 rounded-xl text-xs sm:text-sm font-mono font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300" data-spec="Salud Pública">Salud Pública</button>
+            <button class="exp-pill px-4 py-2 rounded-xl text-xs sm:text-sm font-mono font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300" data-spec="Bioética">Bioética</button>
+          </div>
+        </div>
+
+        <div id="exp-questions-container" class="space-y-4"></div>
+
+        <div class="flex items-center justify-between p-4 bto-card rounded-2xl bg-white dark:bg-bto-panel font-mono text-sm">
+          <button id="btn-exp-prev" class="bto-btn px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-900 font-bold">← Anterior</button>
+          <span id="exp-page-indicator" class="font-bold text-slate-600 dark:text-slate-300">Página 1 de 1</span>
+          <button id="btn-exp-next" class="bto-btn px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-900 font-bold">Siguiente →</button>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- TAB 5: FLASHCARDS CACES (SOLO EN MODO ESTUDIO)                      -->
+    <!-- =================================================================== -->
+    <section id="tab-flashcards" class="tab-content hidden">
+      <div class="max-w-4xl mx-auto py-4 space-y-6">
+        
+        <div class="bto-card p-6 sm:p-7 rounded-3xl bg-white dark:bg-bto-panel flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <div class="flex items-center gap-3 mb-1">
+              <h2 class="font-display text-2xl font-bold">Flashcards de Guardia MSP</h2>
+              <span id="fc-progress-badge" class="px-3 py-1 rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-mono text-sm font-bold">0/0</span>
+            </div>
+            <p class="text-sm text-slate-500 dark:text-slate-400">Repetición espaciada activa de puntos de corte, escalas y fármacos de primera elección.</p>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-3">
+            <select id="fc-source-select" class="p-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-sm font-semibold">
+              <option value="all" selected>Perlas MSP + Todo el Banco</option>
+              <option value="msp_pearls">Solo Perlas Oficiales MSP</option>
+              <option value="errors">Solo Mis Errores (La Morgue)</option>
+            </select>
+
+            <select id="fc-specialty-select" class="p-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-sm font-semibold">
+              <option value="Todas" selected>Todas las Áreas</option>
+              <option value="Medicina Interna">Medicina Interna</option>
+              <option value="Pediatría">Pediatría</option>
+              <option value="Ginecología y Obstetricia">Gíneco - Obstetricia</option>
+              <option value="Cirugía">Cirugía</option>
+              <option value="Salud Mental">Salud Mental</option>
+              <option value="Salud Pública">Salud Pública</option>
+              <option value="Bioética">Bioética</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="fc-card-wrapper" class="cursor-pointer select-none">
+          <div id="fc-card" class="bto-card min-h-[380px] p-8 sm:p-12 rounded-3xl bg-white dark:bg-bto-panel flex flex-col justify-between space-y-6">
+            
+            <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-4">
+              <div class="flex flex-wrap items-center gap-3">
+                <span id="fc-specialty-badge" class="px-3 py-1 rounded-lg bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-mono text-xs sm:text-sm font-bold">Especialidad</span>
+                <span id="fc-subtema-badge" class="text-sm font-mono text-slate-500 dark:text-slate-400">Subtema</span>
+              </div>
+              <span id="fc-side-indicator" class="font-mono text-xs sm:text-sm font-bold text-slate-400 uppercase">ANVERSO // CASO</span>
+            </div>
+
+            <div class="flex-1 flex flex-col justify-center py-6">
+              <div id="fc-content-front" class="space-y-6">
+                <div id="fc-question-text" class="clinical-prose text-lg sm:text-2xl font-medium text-slate-800 dark:text-slate-100 leading-relaxed">
+                  Cargando tarjeta...
+                </div>
+                <div class="text-center font-mono text-sm font-bold text-emerald-600 dark:text-emerald-400 pt-4">
+                  Presiona [ESPACIO] o haz clic para revelar la respuesta oficial
+                </div>
+              </div>
+
+              <div id="fc-content-back" class="hidden space-y-5">
+                <div class="p-5 rounded-2xl bg-emerald-500/15 border border-emerald-500/40">
+                  <span class="font-mono text-xs sm:text-sm font-bold uppercase text-emerald-700 dark:text-emerald-300 block mb-1.5">Conducta / Respuesta Oficial:</span>
+                  <div id="fc-answer-text" class="clinical-prose text-lg sm:text-xl font-bold text-slate-900 dark:text-white"></div>
+                </div>
+                <div class="p-5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                  <span class="font-mono text-xs sm:text-sm font-bold text-sky-600 dark:text-sky-400 block mb-1.5">Fundamento Clínico:</span>
+                  <div id="fc-justification-text" class="clinical-prose text-base text-slate-700 dark:text-slate-200 leading-relaxed"></div>
+                </div>
+                <div id="fc-perla-container" class="hidden p-5 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-1.5">
+                  <span class="font-mono text-xs sm:text-sm font-bold text-amber-700 dark:text-amber-300 block">Perla CACES:</span>
+                  <div id="fc-perla-text" class="clinical-prose text-base text-slate-800 dark:text-slate-100 font-medium"></div>
+                  <div id="fc-guia-text" class="font-mono text-xs sm:text-sm text-slate-500 italic pt-1"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between font-mono text-xs sm:text-sm text-slate-400 pt-4 border-t border-slate-200 dark:border-slate-800">
+              <span id="fc-mastered-label">0 dominadas</span>
+              <span>Atajos: [1] Repetir • [2] Bien • [3] Dominada</span>
+            </div>
+          </div>
+        </div>
+
+        <div id="fc-actions" class="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+          <button id="btn-fc-hard" class="bto-btn py-4 px-5 rounded-2xl bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/25 font-bold text-sm sm:text-base flex flex-col items-center gap-1">
+            <span>Difícil (Repetir)</span>
+            <span class="font-mono text-xs opacity-75">Tecla 1</span>
+          </button>
+          <button id="btn-fc-good" class="bto-btn py-4 px-5 rounded-2xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/25 font-bold text-sm sm:text-base flex flex-col items-center gap-1">
+            <span>Regular (Avanzar)</span>
+            <span class="font-mono text-xs opacity-75">Tecla 2</span>
+          </button>
+          <button id="btn-fc-easy" class="bto-btn py-4 px-5 rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/25 font-bold text-sm sm:text-base flex flex-col items-center gap-1">
+            <span>Dominada (+15 XP)</span>
+            <span class="font-mono text-xs opacity-75">Tecla 3</span>
+          </button>
+        </div>
+
+        <div class="flex items-center justify-between pt-2">
+          <button id="btn-fc-prev" class="bto-btn px-6 py-3 rounded-xl bg-white dark:bg-slate-900 text-sm sm:text-base font-bold">← Anterior</button>
+          <button id="btn-fc-flip" class="bto-btn px-8 py-3 rounded-xl bg-emerald-500 text-slate-950 text-sm sm:text-base font-bold border-transparent">Voltear Tarjeta</button>
+          <button id="btn-fc-next" class="bto-btn px-6 py-3 rounded-xl bg-white dark:bg-slate-900 text-sm sm:text-base font-bold">Siguiente →</button>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- TAB 6: LA MORGUE (SOLO EN MODO ESTUDIO)                             -->
+    <!-- =================================================================== -->
+    <section id="tab-errores" class="tab-content hidden">
+      <div class="max-w-5xl mx-auto py-4 space-y-6">
+        <div class="bto-card flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-7 rounded-3xl bg-white dark:bg-bto-panel">
+          <div class="space-y-1">
+            <div class="flex items-center gap-3">
+              <h2 class="font-display text-2xl font-bold">La Morgue (Auditoría de Errores)</h2>
+              <span id="badge-error-count" class="px-3 py-1 rounded-lg bg-rose-500 text-white font-mono text-xs sm:text-sm font-bold">0 pendientes</span>
+            </div>
+            <p class="text-sm sm:text-base text-slate-500 dark:text-slate-400">Cada reactivo que fallas ingresa aquí. Debes acertarlo 2 veces seguidas para dar de alta el tema.</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <button id="btn-study-errors" class="bto-btn px-6 py-3 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-sm sm:text-base font-bold whitespace-nowrap border-transparent">
+              Reentrenar Errores Ahora
+            </button>
+            <button id="btn-clear-errors" class="bto-btn px-4 py-3 rounded-xl bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-300" title="Vaciar Morgue">
+              <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div id="errors-list-container" class="space-y-4"></div>
+      </div>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- TAB 7: CALCULADORAS & ESCALAS MSP (ALOJADAS EN MENÚ HAMBURGUESA)    -->
+    <!-- =================================================================== -->
+    <section id="tab-calculadoras" class="tab-content hidden">
+      <div class="max-w-5xl mx-auto py-4 space-y-6">
+        
+        <div class="bto-card p-7 rounded-3xl bg-white dark:bg-bto-panel space-y-5">
+          <div class="flex items-center gap-4">
+            <div class="w-12 h-12 rounded-2xl bg-emerald-500/15 text-emerald-500 border border-emerald-500/30 flex items-center justify-center">
+              <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/></svg>
+            </div>
+            <div>
+              <h2 class="font-display text-2xl font-bold">Escalas Clínicas & Claves Obstétricas MSP</h2>
+              <p class="text-sm sm:text-base text-slate-500 dark:text-slate-400">Algoritmos interactivos basados en las Guías de Práctica Clínica del Ministerio de Salud Pública del Ecuador.</p>
+            </div>
+          </div>
+
+          <div class="flex flex-wrap gap-2.5 pt-4 border-t border-slate-200 dark:border-slate-800">
+            <button class="calc-subtab-btn px-4 py-2.5 rounded-xl bg-emerald-500 text-slate-950 font-bold text-sm transition-colors" data-calc="mama">Score MAMÁ & Claves</button>
+            <button class="calc-subtab-btn px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-sm" data-calc="fpp">Regla Naegele (FPP)</button>
+            <button class="calc-subtab-btn px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-sm" data-calc="aiepi">AIEPI Deshidratación</button>
+            <button class="calc-subtab-btn px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-sm" data-calc="alvarado">Escala Alvarado</button>
+            <button class="calc-subtab-btn px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-sm" data-calc="curb">CURB-65 Neumonía</button>
+          </div>
+        </div>
+
+        <!-- 1. PANEL SCORE MAMA -->
+        <div id="calc-panel-mama" class="calc-panel space-y-6">
+          <div class="bto-card p-7 rounded-3xl bg-white dark:bg-bto-panel space-y-6">
+            <h3 class="font-display font-bold text-xl">Score MAMÁ (Detección Temprana de Morbilidad Materna)</h3>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div>
+                <label class="block font-mono text-xs sm:text-sm font-bold text-slate-500 mb-1.5">FC (lpm):</label>
+                <input type="number" id="mama-fc" value="80" class="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono text-base font-bold">
+              </div>
+              <div>
+                <label class="block font-mono text-xs sm:text-sm font-bold text-slate-500 mb-1.5">PA Sistólica:</label>
+                <input type="number" id="mama-pas" value="110" class="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono text-base font-bold">
+              </div>
+              <div>
+                <label class="block font-mono text-xs sm:text-sm font-bold text-slate-500 mb-1.5">PA Diastólica:</label>
+                <input type="number" id="mama-pad" value="70" class="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono text-base font-bold">
+              </div>
+              <div>
+                <label class="block font-mono text-xs sm:text-sm font-bold text-slate-500 mb-1.5">FR (rpm):</label>
+                <input type="number" id="mama-fr" value="18" class="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono text-base font-bold">
+              </div>
+              <div>
+                <label class="block font-mono text-xs sm:text-sm font-bold text-slate-500 mb-1.5">Temp (°C):</label>
+                <input type="number" step="0.1" id="mama-temp" value="36.5" class="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono text-base font-bold">
+              </div>
+              <div>
+                <label class="block font-mono text-xs sm:text-sm font-bold text-slate-500 mb-1.5">SatO2 (%):</label>
+                <input type="number" id="mama-sat" value="98" class="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono text-base font-bold">
+              </div>
+              <div>
+                <label class="block font-mono text-xs sm:text-sm font-bold text-slate-500 mb-1.5">Conciencia:</label>
+                <select id="mama-conciencia" class="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-sm font-bold">
+                  <option value="0" selected>Alerta (0)</option>
+                  <option value="2">Responde a la voz (2)</option>
+                  <option value="3">Dolor / No responde (3)</option>
+                </select>
+              </div>
+              <div>
+                <label class="block font-mono text-xs sm:text-sm font-bold text-slate-500 mb-1.5">Proteinuria:</label>
+                <select id="mama-proteinuria" class="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-sm font-bold">
+                  <option value="0" selected>Negativa (0)</option>
+                  <option value="1">1+ (1)</option>
+                  <option value="2">2+ (2)</option>
+                  <option value="3">3+ o más (3)</option>
+                </select>
+              </div>
+            </div>
+
+            <div id="mama-result-box" class="p-6 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2.5">
+              <div class="flex items-center justify-between">
+                <span class="text-base font-bold">Puntaje Total Score MAMÁ:</span>
+                <span id="mama-score-badge" class="px-4 py-1.5 rounded-full font-mono text-base font-black bg-emerald-500 text-slate-950">0 Puntos</span>
+              </div>
+              <p id="mama-recommendation-text" class="text-sm sm:text-base text-slate-600 dark:text-slate-300 leading-relaxed"></p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+              <div class="p-5 rounded-2xl bg-rose-500/10 border border-rose-500/30 space-y-1.5">
+                <b class="text-rose-600 dark:text-rose-400 block font-mono text-sm font-bold">CLAVE ROJA (Hemorragia)</b>
+                <p class="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">Masaje uterino bimanual + Oxitocina 20-40 UI en 1000ml cristaloides + Ácido Tranexámico 1g IV en 10 min.</p>
+              </div>
+              <div class="p-5 rounded-2xl bg-sky-500/10 border border-sky-500/30 space-y-1.5">
+                <b class="text-sky-600 dark:text-sky-400 block font-mono text-sm font-bold">CLAVE AZUL (Trast. Hipertensivo)</b>
+                <p class="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">Sulfato de Magnesio Zuspan (4g IV en 20min + 1g/h infusión) + Nifedipino 10mg VO o Hidralazina IV si PA ≥ 160/110.</p>
+              </div>
+              <div class="p-5 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-1.5">
+                <b class="text-amber-600 dark:text-amber-400 block font-mono text-sm font-bold">CLAVE AMARILLA (Sepsis)</b>
+                <p class="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">Hemocultivos + Antibiótico de amplio espectro en la 1ra hora + Reanimación con cristaloides 30 ml/kg.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. PANEL REGLA NAEGELE (FPP) -->
+        <div id="calc-panel-fpp" class="calc-panel hidden space-y-6">
+          <div class="bto-card p-7 rounded-3xl bg-white dark:bg-bto-panel space-y-5">
+            <h3 class="font-display font-bold text-xl">Fecha Probable de Parto (FPP) y Edad Gestacional</h3>
+            <div class="max-w-xs">
+              <label class="block font-mono text-xs sm:text-sm font-bold text-slate-500 mb-1.5">Fecha de Última Menstruación (FUM):</label>
+              <input type="date" id="fpp-fur-input" class="w-full p-3.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono text-base font-bold">
+            </div>
+            <div id="fpp-result-box" class="p-6 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-5 font-mono">
+                <div>
+                  <span class="text-xs sm:text-sm text-slate-500 uppercase block mb-1">FPP (Regla de Naegele):</span>
+                  <span id="fpp-naegele-text" class="text-lg font-black text-emerald-600 dark:text-emerald-400">-</span>
+                </div>
+                <div>
+                  <span class="text-xs sm:text-sm text-slate-500 uppercase block mb-1">FPP (Regla de Wahl):</span>
+                  <span id="fpp-wahl-text" class="text-lg font-black text-sky-500">-</span>
+                </div>
+                <div>
+                  <span class="text-xs sm:text-sm text-slate-500 uppercase block mb-1">Edad Gestacional Hoy:</span>
+                  <span id="fpp-eg-text" class="text-lg font-black text-amber-500">-</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. PANEL AIEPI DESHIDRATACIÓN -->
+        <div id="calc-panel-aiepi" class="calc-panel hidden space-y-6">
+          <div class="bto-card p-7 rounded-3xl bg-white dark:bg-bto-panel space-y-5">
+            <h3 class="font-display font-bold text-xl">Clasificación AIEPI de Deshidratación Pediátrica</h3>
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
+              <div>
+                <label class="block font-mono text-xs sm:text-sm font-bold text-slate-500 mb-1.5">Peso (kg):</label>
+                <input type="number" id="aiepi-peso" value="10" step="0.5" class="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono text-base font-bold">
+              </div>
+              <div>
+                <label class="block font-mono text-xs sm:text-sm font-bold text-slate-500 mb-1.5">Estado General:</label>
+                <select id="aiepi-estado" class="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-sm font-semibold">
+                  <option value="alerta" selected>Alerta</option>
+                  <option value="irritable">Intranquilo / Irritable</option>
+                  <option value="letargico">Letárgico / Inconsciente</option>
+                </select>
+              </div>
+              <div>
+                <label class="block font-mono text-xs sm:text-sm font-bold text-slate-500 mb-1.5">Ojos:</label>
+                <select id="aiepi-ojos" class="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-sm font-semibold">
+                  <option value="normales" selected>Normales</option>
+                  <option value="hundidos">Hundidos</option>
+                </select>
+              </div>
+              <div>
+                <label class="block font-mono text-xs sm:text-sm font-bold text-slate-500 mb-1.5">Sed:</label>
+                <select id="aiepi-sed" class="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-sm font-semibold">
+                  <option value="normal" selected>Bebe normal</option>
+                  <option value="avidez">Bebe con avidez</option>
+                  <option value="incapaz">No puede beber</option>
+                </select>
+              </div>
+              <div>
+                <label class="block font-mono text-xs sm:text-sm font-bold text-slate-500 mb-1.5">Signo del Pliegue:</label>
+                <select id="aiepi-pliegue" class="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-sm font-semibold">
+                  <option value="inmediato" selected>Inmediato</option>
+                  <option value="lento">Lento (&lt; 2 seg)</option>
+                  <option value="muy_lento">Muy lento (&gt; 2 seg)</option>
+                </select>
+              </div>
+            </div>
+            <div id="aiepi-result-box" class="p-6 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
+              <div class="flex items-center justify-between">
+                <span id="aiepi-diag-badge" class="px-4 py-1.5 rounded-full font-mono text-sm font-bold bg-emerald-500/20 text-emerald-600 dark:text-emerald-300">SIN DESHIDRATACIÓN</span>
+                <span id="aiepi-plan-badge" class="font-mono text-base font-bold">PLAN A</span>
+              </div>
+              <p id="aiepi-conducta-text" class="text-sm sm:text-base text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-line"></p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 4. PANEL ALVARADO -->
+        <div id="calc-panel-alvarado" class="calc-panel hidden space-y-6">
+          <div class="bto-card p-7 rounded-3xl bg-white dark:bg-bto-panel space-y-5">
+            <h3 class="font-display font-bold text-xl">Escala de Alvarado (Sospecha de Apendicitis Aguda)</h3>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-sm sm:text-base">
+              <label class="flex items-center gap-3 p-4 rounded-xl border border-slate-200 dark:border-slate-800 cursor-pointer"><input type="checkbox" id="alv-migratorio" class="w-4 h-4 accent-emerald-500"> <span>Migración del dolor a FID (+1)</span></label>
+              <label class="flex items-center gap-3 p-4 rounded-xl border border-slate-200 dark:border-slate-800 cursor-pointer"><input type="checkbox" id="alv-anorexia" class="w-4 h-4 accent-emerald-500"> <span>Anorexia o cetonuria (+1)</span></label>
+              <label class="flex items-center gap-3 p-4 rounded-xl border border-slate-200 dark:border-slate-800 cursor-pointer"><input type="checkbox" id="alv-nauseas" class="w-4 h-4 accent-emerald-500"> <span>Náuseas o vómitos (+1)</span></label>
+              <label class="flex items-center gap-3 p-4 rounded-xl border-2 border-emerald-500/50 bg-emerald-500/5 cursor-pointer font-bold"><input type="checkbox" id="alv-dolorFID" class="w-4 h-4 accent-emerald-500"> <span>Dolor en cuadrante inferior derecho (+2 pts)</span></label>
+              <label class="flex items-center gap-3 p-4 rounded-xl border border-slate-200 dark:border-slate-800 cursor-pointer"><input type="checkbox" id="alv-blumberg" class="w-4 h-4 accent-emerald-500"> <span>Signo de Blumberg / Rebote (+1)</span></label>
+              <label class="flex items-center gap-3 p-4 rounded-xl border border-slate-200 dark:border-slate-800 cursor-pointer"><input type="checkbox" id="alv-fiebre" class="w-4 h-4 accent-emerald-500"> <span>Temperatura ≥ 37.3 °C (+1)</span></label>
+              <label class="flex items-center gap-3 p-4 rounded-xl border-2 border-emerald-500/50 bg-emerald-500/5 cursor-pointer font-bold"><input type="checkbox" id="alv-leucocitosis" class="w-4 h-4 accent-emerald-500"> <span>Leucocitosis &gt; 10,000 /mm³ (+2 pts)</span></label>
+              <label class="flex items-center gap-3 p-4 rounded-xl border border-slate-200 dark:border-slate-800 cursor-pointer"><input type="checkbox" id="alv-desviacion" class="w-4 h-4 accent-emerald-500"> <span>Neutrofilia &gt; 75% (+1)</span></label>
+            </div>
+            <div id="alvarado-result-box" class="p-6 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2.5">
+              <span id="alv-score-badge" class="inline-block px-4 py-1.5 rounded-full font-mono text-sm font-bold bg-emerald-500/20 text-emerald-600 dark:text-emerald-300">0 PUNTOS</span>
+              <p id="alv-interpretation-text" class="text-sm sm:text-base text-slate-700 dark:text-slate-300"></p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 5. PANEL CURB-65 -->
+        <div id="calc-panel-curb" class="calc-panel hidden space-y-6">
+          <div class="bto-card p-7 rounded-3xl bg-white dark:bg-bto-panel space-y-5">
+            <h3 class="font-display font-bold text-xl">Escala CURB-65 (Severidad en Neumonía Adquirida en la Comunidad)</h3>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-sm sm:text-base">
+              <label class="flex items-center gap-3 p-4 rounded-xl border border-slate-200 dark:border-slate-800 cursor-pointer"><input type="checkbox" id="curb-c" class="w-4 h-4 accent-emerald-500"> <span><b>C:</b> Confusión mental aguda (+1)</span></label>
+              <label class="flex items-center gap-3 p-4 rounded-xl border border-slate-200 dark:border-slate-800 cursor-pointer"><input type="checkbox" id="curb-u" class="w-4 h-4 accent-emerald-500"> <span><b>U:</b> BUN &gt; 19 mg/dL o Urea &gt; 7 mmol/L (+1)</span></label>
+              <label class="flex items-center gap-3 p-4 rounded-xl border border-slate-200 dark:border-slate-800 cursor-pointer"><input type="checkbox" id="curb-r" class="w-4 h-4 accent-emerald-500"> <span><b>R:</b> Frecuencia Respiratoria ≥ 30 rpm (+1)</span></label>
+              <label class="flex items-center gap-3 p-4 rounded-xl border border-slate-200 dark:border-slate-800 cursor-pointer"><input type="checkbox" id="curb-b" class="w-4 h-4 accent-emerald-500"> <span><b>B:</b> PAS &lt; 90 mmHg o PAD ≤ 60 mmHg (+1)</span></label>
+              <label class="flex items-center gap-3 p-4 rounded-xl border border-slate-200 dark:border-slate-800 cursor-pointer sm:col-span-2"><input type="checkbox" id="curb-65" class="w-4 h-4 accent-emerald-500"> <span><b>65:</b> Edad ≥ 65 años (+1)</span></label>
+            </div>
+            <div id="curb-result-box" class="p-6 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2.5">
+              <div class="flex items-center justify-between">
+                <span id="curb-score-badge" class="px-4 py-1.5 rounded-full font-mono text-sm font-bold bg-emerald-500/20 text-emerald-600 dark:text-emerald-300">Score 0</span>
+                <span id="curb-lugar-badge" class="font-mono text-base font-bold">Manejo Ambulatorio</span>
+              </div>
+              <p id="curb-tratamiento-text" class="text-sm sm:text-base text-slate-700 dark:text-slate-300"></p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- TAB 8: ANALÍTICA & TELEMETRÍA (ALOJADA EN MENÚ HAMBURGUESA)         -->
+    <!-- =================================================================== -->
+    <section id="tab-analitica" class="tab-content hidden">
+      <div class="max-w-6xl mx-auto py-4 space-y-6">
+        
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-5">
+          <div class="bto-card p-6 rounded-3xl bg-white dark:bg-bto-panel">
+            <span class="font-mono text-xs sm:text-sm font-bold text-slate-500 uppercase block mb-2">Reactivos Resueltos</span>
+            <div id="kpi-answered" class="font-mono text-3xl font-black">0</div>
+          </div>
+          <div class="bto-card p-6 rounded-3xl bg-white dark:bg-bto-panel">
+            <span class="font-mono text-xs sm:text-sm font-bold text-slate-500 uppercase block mb-2">Precisión Global</span>
+            <div id="kpi-accuracy" class="font-mono text-3xl font-black text-emerald-500">0%</div>
+          </div>
+          <div class="bto-card p-6 rounded-3xl bg-white dark:bg-bto-panel">
+            <span class="font-mono text-xs sm:text-sm font-bold text-slate-500 uppercase block mb-2">Estado La Morgue</span>
+            <div id="kpi-errors" class="font-mono text-2xl font-black text-rose-500">0 act. / 0 dom.</div>
+          </div>
+          <div class="bto-card p-6 rounded-3xl bg-white dark:bg-bto-panel">
+            <span class="font-mono text-xs sm:text-sm font-bold text-slate-500 uppercase block mb-2">Simulacros Cerrados</span>
+            <div id="kpi-simulacros" class="font-mono text-3xl font-black text-sky-500">0</div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <div class="bto-card p-6 rounded-3xl bg-emerald-500/10 border border-emerald-500/25 flex items-center gap-4">
+            <div class="w-12 h-12 rounded-2xl bg-emerald-500 text-slate-950 flex items-center justify-center font-bold shrink-0">
+              <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="20 6 9 17 4 12"/></svg>
+            </div>
+            <div>
+              <span class="font-mono text-xs sm:text-sm font-bold text-emerald-600 dark:text-emerald-400 uppercase">Componente Más Fuerte</span>
+              <div id="kpi-strength" class="text-base sm:text-lg font-bold mt-0.5">Completa un simulacro</div>
+            </div>
+          </div>
+          <div class="bto-card p-6 rounded-3xl bg-rose-500/10 border border-rose-500/25 flex items-center gap-4">
+            <div class="w-12 h-12 rounded-2xl bg-rose-500 text-white flex items-center justify-center font-bold shrink-0">
+              <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            </div>
+            <div>
+              <span class="font-mono text-xs sm:text-sm font-bold text-rose-600 dark:text-rose-400 uppercase">Área Prioritaria a Reforzar</span>
+              <div id="kpi-weakness" class="text-base sm:text-lg font-bold mt-0.5">Completa un simulacro</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div class="bto-card p-7 rounded-3xl bg-white dark:bg-bto-panel space-y-4">
+            <h3 class="font-display font-bold text-lg">Radar de Competencias EHEP (7 Áreas)</h3>
+            <div class="h-72 sm:h-80 relative"><canvas id="radarChart"></canvas></div>
+          </div>
+          <div class="bto-card p-7 rounded-3xl bg-white dark:bg-bto-panel space-y-4">
+            <h3 class="font-display font-bold text-lg">Evolución Histórica vs Umbral (60%)</h3>
+            <div class="h-72 sm:h-80 relative"><canvas id="historyChart"></canvas></div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- TAB 9: INYECTAR BANCO DE PREGUNTAS (OCULTO PARA USUARIOS PÚBLICOS)  -->
+    <!-- =================================================================== -->
+    <section id="tab-importar" class="tab-content hidden">
+      <div class="max-w-3xl mx-auto py-4 space-y-6">
+        
+        <div class="bto-card p-7 sm:p-8 rounded-3xl bg-slate-900 text-white space-y-4 border border-slate-800">
+          <div class="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <span class="font-mono text-xs text-rose-400 uppercase font-bold">Panel Exclusivo de Administrador</span>
+              <h2 class="font-display text-xl font-bold">Extractor de Bancos (Consola JS)</h2>
+              <p class="text-sm text-slate-400">Copia el script para capturar reactivos estructurados en formato JSON limpio.</p>
+            </div>
+            <button id="btn-copy-extractor-script" class="bto-btn px-5 py-2.5 rounded-xl bg-emerald-500 text-slate-950 font-mono font-bold text-sm border-transparent">
+              Copiar Script
+            </button>
+          </div>
+        </div>
+
+        <div class="bto-card p-7 sm:p-8 rounded-3xl bg-white dark:bg-bto-panel space-y-5">
+          <h3 class="font-display text-xl font-bold">Inyectar Archivo (PDF, Markdown .md o JSON)</h3>
+          <div id="pdf-drop-zone" class="border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-emerald-500 rounded-3xl p-10 text-center cursor-pointer transition-colors bg-slate-50 dark:bg-slate-900/60">
+            <input type="file" id="pdf-file-input" accept=".pdf,application/pdf,.json,application/json,.md,text/markdown,.txt,text/plain" class="hidden">
+            <p class="font-bold text-base sm:text-lg">Arrastra tu archivo PDF, Markdown o JSON aquí, o haz clic para explorar</p>
+            <p class="text-sm text-slate-500 mt-1">Con sanitizador automático de texto clínico y detección de duplicados.</p>
+          </div>
+
+          <div class="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
+            <div id="pdf-status-text" class="font-mono text-sm font-bold text-emerald-600 dark:text-emerald-400"></div>
+            <div class="flex items-center gap-3">
+              <button id="btn-import-clear-db" class="bto-btn text-sm font-mono font-bold px-4 py-2.5 rounded-xl bg-rose-500/10 text-rose-500 border-rose-500/25">
+                Vaciar a 0
+              </button>
+              <button id="btn-load-sample-pdf" class="bto-btn text-sm font-mono font-bold px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800">
+                Probar PDF CACES
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="bto-card p-7 sm:p-8 rounded-3xl bg-white dark:bg-bto-panel space-y-4">
+          <h3 class="font-display text-xl font-bold">Pegar JSON Directo</h3>
+          <textarea id="json-paste-input" rows="5" placeholder='[{"enunciado": "Paciente...", "opciones": {"A": "..."}, "correcta": "A"}]' class="w-full p-4 rounded-2xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-sm font-mono"></textarea>
+          <button id="btn-process-json-paste" class="bto-btn w-full py-3.5 rounded-xl bg-emerald-500 text-slate-950 font-bold text-sm uppercase border-transparent">
+            Procesar JSON
+          </button>
+        </div>
+
+        <div id="pdf-preview-container" class="hidden bto-card p-7 sm:p-8 rounded-3xl bg-white dark:bg-bto-panel space-y-5">
+          <div class="flex items-center justify-between">
+            <h3 class="font-display font-bold text-lg">Vista Previa de Reactivos</h3>
+            <span id="pdf-detected-count" class="px-3.5 py-1 rounded-full bg-emerald-500 text-slate-950 font-mono text-sm font-bold">0 detectadas</span>
+          </div>
+          <div id="pdf-preview-list" class="space-y-3 max-h-96 overflow-y-auto pr-2"></div>
+          <button id="btn-save-imported-questions" class="bto-btn w-full py-4 rounded-2xl bg-emerald-500 text-slate-950 font-bold text-base border-transparent">
+            Guardar en el Banco Oficial
+          </button>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- TAB 10: NUBE SUPABASE (OCULTO PARA USUARIOS PÚBLICOS)               -->
+    <!-- =================================================================== -->
+    <section id="tab-nube" class="tab-content hidden">
+      <div class="max-w-3xl mx-auto py-4 space-y-6">
+        <div class="bto-card p-7 sm:p-9 rounded-3xl bg-white dark:bg-bto-panel space-y-6">
+          <h2 class="font-display text-2xl font-bold">Sincronización en la Nube (Supabase Admin)</h2>
+          <div id="cloud-test-alert" class="hidden p-4 rounded-2xl text-sm font-mono font-bold"></div>
+          <div class="space-y-4">
+            <div>
+              <label class="block font-mono text-xs sm:text-sm font-bold text-slate-500 mb-1.5">Project URL:</label>
+              <input type="text" id="supabase-url" class="w-full p-3.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-sm sm:text-base font-mono">
+            </div>
+            <div>
+              <label class="block font-mono text-xs sm:text-sm font-bold text-slate-500 mb-1.5">Anon Public Key:</label>
+              <input type="password" id="supabase-key" class="w-full p-3.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-sm sm:text-base font-mono">
+            </div>
+            <div class="flex flex-col sm:flex-row gap-3 pt-2">
+              <button id="btn-save-supabase" class="bto-btn flex-1 py-4 rounded-xl bg-emerald-500 text-slate-950 font-bold text-sm uppercase border-transparent">Guardar y Conectar</button>
+              <button id="btn-copy-sql" class="bto-btn py-4 px-5 rounded-xl bg-slate-100 dark:bg-slate-900 font-mono text-sm font-bold">Copiar Esquema SQL</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="bto-card p-7 sm:p-9 rounded-3xl bg-white dark:bg-bto-panel space-y-5">
+          <h3 class="font-display text-xl font-bold">Mantenimiento de Base de Datos</h3>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            <button id="btn-export-db-json" class="bto-btn py-3.5 px-4 rounded-xl bg-slate-100 dark:bg-slate-900 font-mono text-sm font-bold">Exportar Respaldo JSON</button>
+            <button id="btn-deduplicate-db" class="bto-btn py-3.5 px-4 rounded-xl bg-slate-100 dark:bg-slate-900 font-mono text-sm font-bold">Limpiar Duplicadas</button>
+            <button id="btn-clear-questions-db" class="bto-btn py-3.5 px-4 rounded-xl bg-rose-500/10 text-rose-500 border-rose-500/25 font-mono text-sm font-bold">Vaciar Banco (0)</button>
+            <button id="btn-reset-all-data" class="bto-btn py-3.5 px-4 rounded-xl bg-rose-500 text-white font-mono text-sm font-bold border-transparent">Reiniciar Todo el Sistema</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ===================================================================== -->
+  <!-- MODAL 1: JERARQUÍA Y EXPLICACIÓN DE LOS 5 RANGOS CLÍNICOS             -->
+  <!-- ===================================================================== -->
+  <div id="ranks-info-modal" class="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-md hidden flex items-center justify-center p-4">
+    <div class="bto-card bg-white dark:bg-bto-panel rounded-3xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+      <div class="p-6 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-900 text-white">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-400 flex items-center justify-center">
+            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+          </div>
+          <div>
+            <h3 class="font-display font-bold text-lg">Escalafón Clínico (5 Rangos Oficiales)</h3>
+            <p class="text-xs font-mono text-slate-400">Progresión médica por puntos de experiencia (XP)</p>
+          </div>
+        </div>
+        <button id="btn-close-ranks-modal" class="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 text-white flex items-center justify-center font-bold">✕</button>
+      </div>
+
+      <div class="p-6 overflow-y-auto space-y-5">
+        <div class="p-5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
+          <div class="flex items-center justify-between">
+            <div>
+              <span class="font-mono text-xs uppercase text-slate-400 block">Tu Rango Actual:</span>
+              <span id="modal-rank-current-title" class="font-display font-extrabold text-xl text-emerald-600 dark:text-emerald-400">Interno Rotativo</span>
+            </div>
+            <div class="text-right font-mono">
+              <span id="modal-rank-current-xp" class="text-lg font-black text-slate-900 dark:text-white">120 XP</span>
+              <span id="modal-rank-next-xp" class="text-xs text-slate-400 block">Meta: 250 XP</span>
+            </div>
+          </div>
+          <div class="w-full bg-slate-200 dark:bg-slate-800 h-3 rounded-full overflow-hidden">
+            <div id="modal-rank-progress-bar" class="bg-gradient-to-r from-emerald-500 to-cyan-400 h-full transition-all duration-300" style="width: 48%"></div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 font-mono text-xs">
+          <div class="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-center">
+            <b class="text-emerald-500 text-sm block">+10 XP</b>
+            <span class="text-slate-600 dark:text-slate-300">Acierto en Guardia</span>
+          </div>
+          <div class="p-3 rounded-xl bg-sky-500/10 border border-sky-500/20 text-center">
+            <b class="text-sky-500 text-sm block">+15 XP</b>
+            <span class="text-slate-600 dark:text-slate-300">Card Dominada</span>
+          </div>
+          <div class="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-center">
+            <b class="text-amber-500 text-sm block">+20 a 25 XP</b>
+            <span class="text-slate-600 dark:text-slate-300">Caso en Arcade</span>
+          </div>
+          <div class="p-3 rounded-xl bg-purple-500/10 border border-purple-500/20 text-center">
+            <b class="text-purple-500 text-sm block">+100 XP</b>
+            <span class="text-slate-600 dark:text-slate-300">Simulacro Aprobado</span>
+          </div>
+        </div>
+
+        <div id="ranks-hierarchy-list" class="space-y-2.5"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- MODAL 2: INICIO DE SESIÓN Y GUARDADO AUTOMÁTICO EN LA NUBE            -->
+  <!-- ===================================================================== -->
+  <div id="auth-modal" class="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-md hidden flex items-center justify-center p-4">
+    <div class="bto-card bg-white dark:bg-bto-panel rounded-3xl w-full max-w-md overflow-hidden">
+      <div class="p-6 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-900 text-white">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center">
+            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          </div>
+          <div>
+            <h3 class="font-display font-bold text-lg">Credencial Médica</h3>
+            <p class="text-xs font-mono text-slate-400">Sincronización automática en la nube</p>
+          </div>
+        </div>
+        <button id="btn-close-auth-modal" class="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 text-white flex items-center justify-center font-bold">✕</button>
+      </div>
+
+      <div class="p-6 space-y-5">
+        <div id="auth-logged-out-view" class="space-y-4">
+          <p class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+            Ingresa tu nombre y correo una sola vez. Todo tu progreso, XP, racha, historial de simulacros y banco de errores se guardará en la nube de forma 100% automática.
+          </p>
+          <div>
+            <label class="block font-mono text-xs font-bold uppercase text-slate-500 mb-1.5">Nombre o Alias Médico:</label>
+            <input type="text" id="auth-name-input" placeholder="Ej: Dr. Demera / Interno ULEAM" class="w-full p-3.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-sm font-semibold">
+          </div>
+          <div>
+            <label class="block font-mono text-xs font-bold uppercase text-slate-500 mb-1.5">Correo Electrónico:</label>
+            <input type="email" id="auth-email-input" placeholder="medico@hospital.ec" class="w-full p-3.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-sm font-mono">
+          </div>
+          <div>
+            <label class="block font-mono text-xs font-bold uppercase text-slate-500 mb-1.5">PIN de Acceso (4 a 8 dígitos):</label>
+            <input type="password" id="auth-pin-input" placeholder="••••" class="w-full p-3.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-sm font-mono">
+          </div>
+          <div id="auth-feedback-msg" class="hidden p-3 rounded-xl text-xs font-mono font-bold"></div>
+          <button id="btn-submit-auth" type="button" class="bto-btn w-full py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-display font-bold text-sm uppercase tracking-wider border-transparent">
+            Activar Guardado Automático
+          </button>
+        </div>
+
+        <div id="auth-logged-in-view" class="hidden space-y-4">
+          <div class="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 space-y-1.5">
+            <div class="flex items-center justify-between">
+              <span class="font-mono text-[11px] uppercase font-bold text-emerald-500 flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+                <span>Autoguardado en la Nube Activo</span>
+              </span>
+            </div>
+            <div id="auth-active-name" class="font-display font-bold text-lg text-slate-900 dark:text-white"></div>
+            <div id="auth-active-email" class="font-mono text-xs text-slate-500"></div>
+            <p id="auth-last-sync-text" class="font-mono text-[11px] text-emerald-600 dark:text-emerald-400 pt-1">
+              Tu progreso se respalda automáticamente tras cada pregunta y simulacro.
+            </p>
+          </div>
+          <div class="flex flex-col gap-2.5">
+            <button id="btn-logout-auth" type="button" class="bto-btn w-full py-3 rounded-xl bg-rose-500/10 text-rose-500 border-rose-500/25 text-xs font-mono font-bold">
+              Cerrar Sesión en este Dispositivo
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- MODAL DEL TUTOR CLÍNICO IA                                            -->
+  <!-- ===================================================================== -->
+  <div id="ai-tutor-modal" class="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-md hidden flex items-center justify-center p-4">
+    <div class="bto-card bg-white dark:bg-bto-panel rounded-3xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
+      <div class="p-5 sm:p-6 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-900 text-white">
+        <div class="flex items-center gap-3.5">
+          <div class="w-11 h-11 rounded-2xl bg-emerald-500 text-slate-950 flex items-center justify-center font-bold">
+            <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/></svg>
+          </div>
+          <div>
+            <h3 class="font-display font-bold text-lg flex items-center gap-2.5">
+              Interconsulta Clínica IA <span class="text-xs font-mono uppercase px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold">Activa</span>
+            </h3>
+            <p class="text-xs sm:text-sm text-slate-400">Razonamiento fisiopatológico y Guías del MSP del Ecuador</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2.5">
+          <button id="btn-ai-config-toggle" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs sm:text-sm font-mono">Configurar API</button>
+          <button id="btn-close-ai-tutor" class="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 text-white flex items-center justify-center text-base font-bold">✕</button>
+        </div>
+      </div>
+
+      <div id="ai-config-panel" class="hidden p-5 bg-slate-100 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 text-sm space-y-3">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <select id="ai-provider-select" class="p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 font-semibold">
+            <option value="gemini" selected>Google Gemini</option>
+            <option value="groq">Groq (Llama 3.3)</option>
+            <option value="openrouter">OpenRouter</option>
+            <option value="openai">OpenAI</option>
+          </select>
+          <select id="ai-model-select" class="p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 font-semibold">
+            <option value="gemini-flash-lite-latest" selected>Gemini Flash Lite</option>
+            <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+          </select>
+          <input type="password" id="ai-key-input" placeholder="Pega tu API Key..." class="p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 font-mono">
+        </div>
+        <button id="btn-save-ai-key" class="px-5 py-2 rounded-xl bg-emerald-500 text-slate-950 font-bold">Guardar Credenciales</button>
+      </div>
+
+      <div id="ai-current-q-context" class="px-5 py-2.5 bg-slate-50 dark:bg-slate-900/90 border-b border-slate-200 dark:border-slate-800 text-xs sm:text-sm font-mono text-slate-500 line-clamp-1"></div>
+
+      <div id="ai-chat-messages" class="flex-1 p-5 sm:p-6 overflow-y-auto space-y-4 text-base max-h-[52vh]"></div>
+
+      <div class="px-4 py-2.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 flex flex-wrap items-center gap-1.5">
+        <button class="ai-chip px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-medium hover:border-emerald-500 transition-colors" data-prompt="Dame la perla clave y el gatillo clínico de este tema para el CACES.">Perla rápida</button>
+        <button class="ai-chip px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-medium hover:border-emerald-500 transition-colors" data-prompt="¿Por qué son incorrectas las otras opciones? Explícame cada distractor en una línea.">Distractores</button>
+        <button class="ai-chip px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-medium hover:border-emerald-500 transition-colors" data-prompt="¿Qué dice la GPC del MSP sobre este tema? Dame el protocolo de manejo.">Protocolo MSP</button>
+        <button class="ai-chip px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-medium hover:border-emerald-500 transition-colors" data-prompt="Dame una mnemotecnia corta para no olvidar esto en el examen.">Mnemotecnia</button>
+      </div>
+
+      <div class="p-4 sm:p-5 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-bto-panel flex items-center gap-3">
+        <input type="text" id="ai-chat-input" placeholder="Escribe tu consulta clínica sobre este caso..." class="flex-1 p-3.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-base">
+        <button id="btn-send-ai-chat" class="bto-btn py-3.5 px-6 rounded-xl bg-emerald-500 text-slate-950 font-bold text-base border-transparent">Enviar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: MATRIZ OFICIAL CACES -->
+  <div id="caces-syllabus-modal" class="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-md hidden flex items-center justify-center p-4 overflow-y-auto">
+    <div class="bto-card bg-white dark:bg-bto-panel rounded-3xl max-w-4xl w-full flex flex-col max-h-[90vh] overflow-hidden my-auto">
+      <div class="p-6 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-900 text-white">
+        <h3 class="font-display font-bold text-xl">Estructura y Glosario Oficial EHEP - CACES</h3>
+        <button id="btn-close-syllabus-modal" class="w-9 h-9 rounded-xl bg-slate-800 text-white font-bold">✕</button>
+      </div>
+      <div class="p-4 bg-slate-100 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
+        <input type="text" id="syllabus-search-input" placeholder="Filtrar término o acrónimo en la matriz..." class="w-full bg-transparent text-base font-mono focus:outline-none">
+      </div>
+      <div class="flex-1 overflow-y-auto p-6 space-y-4 text-sm sm:text-base" id="syllabus-components-container">
+        <div id="caces-acronyms-table" class="grid grid-cols-1 sm:grid-cols-2 gap-3.5 p-5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+          <div class="p-2"><b>ABO:</b> Incompatibilidad Rh/ABO</div>
+          <div class="p-2"><b>AIEPI:</b> Atención Integrada de Enfermedades Prevalentes de la Infancia</div>
+          <div class="p-2"><b>ASIS:</b> Análisis de Situación Integral de Salud</div>
+          <div class="p-2"><b>HELLP:</b> Hemólisis, Enzimas hepáticas elevadas, Plaquetopenia</div>
+          <div class="p-2"><b>MAIS-FCI:</b> Modelo de Atención Integral de Salud Familiar, Comunitario e Intercultural</div>
+          <div class="p-2"><b>PAI:</b> Programa Ampliado de Inmunizaciones (MSP)</div>
+          <div class="p-2"><b>SIVE-Alerta:</b> Sistema Integrado de Vigilancia Epidemiológica</div>
+        </div>
+      </div>
+      <div class="p-5 border-t border-slate-200 dark:border-slate-800 flex justify-end">
+        <button id="btn-syllabus-start-caces" class="bto-btn px-6 py-3 rounded-xl bg-emerald-500 text-slate-950 font-bold text-sm sm:text-base border-transparent">Iniciar Simulacro Oficial 100 Preguntas →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODALES DE SUBTEMAS -->
+  <div id="temario-practice-modal" class="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-md hidden flex items-center justify-center p-4">
+    <div class="bto-card bg-white dark:bg-bto-panel rounded-3xl w-full max-w-lg p-7 space-y-6">
+      <div class="flex items-center justify-between">
+        <div>
+          <h3 class="font-display font-bold text-xl" id="tp-modal-title">Entrenar Subtema</h3>
+          <p class="font-mono text-sm text-slate-500 mt-0.5" id="tp-modal-spec">Especialidad</p>
+        </div>
+        <button id="btn-close-tp-modal" class="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 font-bold">✕</button>
+      </div>
+      <div class="grid grid-cols-3 gap-3" id="tp-count-buttons">
+        <button class="tp-count-opt py-3.5 px-3 rounded-2xl border border-slate-300 dark:border-slate-700 font-mono font-bold text-sm" data-count="10">10 Ítems</button>
+        <button class="tp-count-opt active py-3.5 px-3 rounded-2xl border-2 border-emerald-500 bg-emerald-500/15 font-mono font-bold text-sm" data-count="20">20 Ítems</button>
+        <button class="tp-count-opt py-3.5 px-3 rounded-2xl border border-slate-300 dark:border-slate-700 font-mono font-bold text-sm" data-count="999">Todas (<span id="tp-count-all-label">Full</span>)</button>
+      </div>
+      <button id="btn-start-topic-practice" class="bto-btn w-full py-4 rounded-2xl bg-emerald-500 text-slate-950 font-bold text-base border-transparent">Lanzar Entrenamiento</button>
+    </div>
+  </div>
+
+  <div id="temario-pearls-modal" class="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-md hidden flex items-center justify-center p-4">
+    <div class="bto-card bg-white dark:bg-bto-panel rounded-3xl w-full max-w-3xl max-h-[88vh] flex flex-col overflow-hidden">
+      <div class="p-6 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+        <div>
+          <h3 class="font-display font-bold text-xl">Perlas CACES: <span id="tpearl-modal-subtema" class="text-amber-500"></span></h3>
+          <p class="font-mono text-sm text-slate-500" id="tpearl-modal-count"></p>
+        </div>
+        <button id="btn-close-tpearl-modal" class="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 font-bold">✕</button>
+      </div>
+      <div class="px-6 py-3.5 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900">
+        <input type="text" id="tpearl-search-input" placeholder="Filtrar perlas clínicas..." class="w-full bg-transparent text-base font-mono focus:outline-none">
+      </div>
+      <div id="tpearl-list-container" class="flex-1 overflow-y-auto p-6 space-y-4"></div>
+      <div class="p-5 border-t border-slate-200 dark:border-slate-800 flex justify-end">
+        <button id="btn-tpearl-start-practice" class="bto-btn px-6 py-3 rounded-xl bg-emerald-500 text-slate-950 font-bold text-sm sm:text-base border-transparent">Practicar este Tema →</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="temario-summary-modal" class="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-md hidden flex items-center justify-center p-4">
+    <div class="bto-card bg-white dark:bg-bto-panel rounded-3xl w-full max-w-2xl max-h-[88vh] flex flex-col overflow-hidden">
+      <div class="p-6 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+        <div>
+          <h3 class="font-display font-bold text-xl">Resumen & Algoritmo MSP</h3>
+          <p class="font-mono text-sm text-slate-500" id="tsummary-modal-subtema"></p>
+        </div>
+        <button id="btn-close-tsummary-modal" class="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 font-bold">✕</button>
+      </div>
+      <div class="flex-1 overflow-y-auto p-6 space-y-4 text-base" id="tsummary-modal-content"></div>
+      <div class="p-5 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-sm">
+        <span class="font-mono text-slate-500" id="tsummary-modal-footer-guide">GPC MSP Ecuador</span>
+        <button id="btn-tsummary-practice" class="bto-btn px-6 py-3 rounded-xl bg-emerald-500 text-slate-950 font-bold border-transparent">Entrenar Preguntas →</button>
+      </div>
+    </div>
+  </div>
+
+  <footer class="border-t border-slate-200/80 dark:border-slate-800/80 py-6 text-center font-mono text-xs sm:text-sm text-slate-500 space-y-1">
+    <p>EL HPTA CACES // SUITE CLÍNICA DE ALTA PRECISIÓN • PREPARACIÓN EHEP MEDICINA ECUADOR</p>
+    <p class="text-emerald-600 dark:text-emerald-400 font-bold tracking-wide">Desarrollado por Jhojann Demera</p>
+  </footer>
+
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>
+2. Archivo js/storage.js (Con Guardado en la Nube Automático)Reemplaza el contenido de js/storage.js por este código:   JavaScriptimport { SupabaseConfig } from './supabase-config.js';
+
+/**
+ * Genera una firma clínica única e invariable para cualquier pregunta
+ * basándose en su enunciado y opciones normalizadas (sin tildes, signos ni mayúsculas).
+ */
+export function getQuestionFingerprint(q) {
+  if (!q) return '';
+  const stem = (q.enunciado || q.statement || q.pregunta || '').toString();
+  const normStem = stem
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]/g, '');
+
+  let optText = '';
+  if (q.opciones) {
+    if (Array.isArray(q.opciones)) {
+      optText = q.opciones.map(o => (typeof o === 'string' ? o : o.texto || o.text || '')).sort().join('');
+    } else if (typeof q.opciones === 'object') {
+      optText = Object.values(q.opciones).map(v => (typeof v === 'string' ? v : v.texto || v.text || '')).sort().join('');
+    }
+  }
+  const normOpt = optText
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]/g, '')
+    .substring(0, 60);
+
+  return `${normStem.substring(0, 220)}_${normOpt}`;
+}
+
+/**
+ * Normaliza las opciones de cualquier pregunta al formato estándar Array:
+ * [ { id: 'A', texto: '...' }, { id: 'B', texto: '...' }, ... ]
+ */
+export function normalizeQuestionOptions(q) {
+  if (!q) return q;
+  const letters = ['A', 'B', 'C', 'D', 'E'];
+  let normalized = [];
+  const rawOpts = q.opciones || q.options || q.respuestas || q.answers;
+
+  if (Array.isArray(rawOpts)) {
+    rawOpts.forEach((item, i) => {
+      if (typeof item === 'string') {
+        normalized.push({ id: letters[i] || `${i + 1}`, texto: item.trim() });
+      } else if (typeof item === 'object' && item !== null) {
+        normalized.push({
+          id: (item.id || item.letter || letters[i] || `${i + 1}`).toString().trim().toUpperCase(),
+          texto: (item.texto || item.text || item.value || item.answer || '').toString().trim()
+        });
+      }
+    });
+  } else if (typeof rawOpts === 'object' && rawOpts !== null) {
+    Object.keys(rawOpts).forEach(k => {
+      const val = rawOpts[k];
+      normalized.push({
+        id: k.toString().trim().toUpperCase(),
+        texto: (typeof val === 'string' ? val : (val?.texto || val?.text || '')).toString().trim()
+      });
+    });
+  }
+
+  normalized = normalized.filter(o => o && o.texto && o.texto.length > 0);
+  while (normalized.length < 4) {
+    const nextL = letters[normalized.length];
+    normalized.push({ id: nextL, texto: `Opción adicional ${nextL}` });
+  }
+
+  return {
+    ...q,
+    opciones: normalized.slice(0, 4)
+  };
+}
+
+class StorageManager {
+  constructor() {
+    this.deviceId = this.getOrCreateDeviceId();
+    this.supabaseClient = null;
+    this._autoSyncTimeout = null;
+    this.initSupabase();
+
+    if (localStorage.getItem('caces_master_db_v4_pro') !== 'true') {
+      localStorage.removeItem('caces_force_empty');
+      localStorage.removeItem('caces_custom_questions');
+      localStorage.removeItem('caces_questions');
+      localStorage.removeItem('custom_questions');
+      localStorage.removeItem('imported_questions');
+      localStorage.removeItem('banco_caces');
+      localStorage.setItem('caces_master_db_v4_pro', 'true');
+    }
+
+    // Sincronizar automáticamente cuando el usuario cierra o cambia de pestaña
+    if (typeof window !== 'undefined') {
+      window.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') {
+          this.syncUserProgressToCloud();
+        }
+      });
+    }
+  }
+
+  getOrCreateDeviceId() {
+    const profile = this.getUserProfile();
+    if (profile && profile.email) {
+      const usrId = `usr_${profile.email}`;
+      localStorage.setItem('caces_device_id', usrId);
+      return usrId;
+    }
+    let id = localStorage.getItem('caces_device_id');
+    if (!id) {
+      id = 'dev_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
+      localStorage.setItem('caces_device_id', id);
+    }
+    return id;
+  }
+
+  initSupabase() {
+    if (SupabaseConfig.isConfigured() && window.supabase) {
+      try {
+        this.supabaseClient = window.supabase.createClient(
+          SupabaseConfig.getUrl(),
+          SupabaseConfig.getAnonKey()
+        );
+      } catch (e) {
+        console.warn("No se pudo inicializar cliente Supabase:", e);
+        this.supabaseClient = null;
+      }
+    } else {
+      this.supabaseClient = null;
+    }
+  }
+
+  // =========================================================================
+  // SISTEMA DE PERFIL DE USUARIO Y GUARDADO AUTOMÁTICO EN LA NUBE
+  // =========================================================================
+  getUserProfile() {
+    try {
+      const raw = localStorage.getItem('caces_user_profile');
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Programa un autoguardado silencioso en segundo plano (con debounce de 2 seg)
+   */
+  scheduleAutoCloudSync(delayMs = 2000) {
+    if (this._autoSyncTimeout) {
+      clearTimeout(this._autoSyncTimeout);
+    }
+    const dot = typeof document !== 'undefined' ? document.getElementById('auto-sync-dot') : null;
+    if (dot) {
+      dot.className = 'w-2 h-2 rounded-full bg-amber-400 animate-ping';
+    }
+    this._autoSyncTimeout = setTimeout(async () => {
+      await this.syncUserProgressToCloud();
+      if (dot) {
+        dot.className = 'w-2 h-2 rounded-full bg-emerald-500';
+      }
+    }, delayMs);
+  }
+
+  async loginOrRegisterUser({ name, email, pin }) {
+    const cleanEmail = (email || '').trim().toLowerCase();
+    const cleanName = (name || '').trim() || cleanEmail.split('@')[0] || 'Médico EHEP';
+    const cleanPin = (pin || '').trim();
+
+    if (!cleanEmail || !cleanEmail.includes('@')) {
+      throw new Error('Ingresa un correo electrónico válido.');
+    }
+    if (cleanPin.length < 4) {
+      throw new Error('El PIN debe tener al menos 4 caracteres.');
+    }
+
+    const userKey = `user_${cleanEmail}_${cleanPin}`;
+    const profile = {
+      name: cleanName,
+      email: cleanEmail,
+      userKey,
+      updatedAt: new Date().toISOString()
+    };
+
+    this.deviceId = `usr_${cleanEmail}`;
+    localStorage.setItem('caces_device_id', this.deviceId);
+    localStorage.setItem('caces_user_profile', JSON.stringify(profile));
+
+    await this.pullUserProgressFromCloud(cleanEmail);
+    await this.syncUserProgressToCloud();
+
+    return profile;
+  }
+
+  logoutUser() {
+    localStorage.removeItem('caces_user_profile');
+  }
+
+  async syncUserProgressToCloud() {
+    if (!this.supabaseClient) return { synced: false };
+
+    const profile = this.getUserProfile();
+    const emailToSync = profile?.email || `${this.deviceId}@local.caces`;
+
+    const snapshot = {
+      xp: parseInt(localStorage.getItem('caces_xp') || '120', 10),
+      streak: parseInt(localStorage.getItem('caces_streak') || '1', 10),
+      highScoreBlitz: parseInt(localStorage.getItem('caces_blitz_high') || '0', 10),
+      errorBank: this.getErrorBank(),
+      srsDeck: JSON.parse(localStorage.getItem('caces_srs_deck') || '{}'),
+      profileName: profile?.name || 'Médico en Guardia',
+      syncedAt: new Date().toISOString()
+    };
+
+    try {
+      await this.supabaseClient.from('caces_simulacros').insert({
+        user_email: emailToSync,
+        device_id: this.deviceId,
+        modo: '__PROFILE_SYNC__',
+        puntuacion_obtenida: snapshot.xp,
+        total_preguntas: snapshot.streak,
+        porcentaje: snapshot.highScoreBlitz,
+        tiempo_segundos: 0,
+        desglose_especialidades: snapshot
+      });
+
+      const syncText = typeof document !== 'undefined' ? document.getElementById('auth-last-sync-text') : null;
+      if (syncText) {
+        const timeStr = new Date().toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' });
+        syncText.textContent = `Último autoguardado en la nube: hoy a las ${timeStr}`;
+      }
+      return { synced: true };
+    } catch (e) {
+      console.warn('Error en autoguardado en la nube:', e);
+      return { synced: false };
+    }
+  }
+
+  async pullUserProgressFromCloud(email) {
+    const targetEmail = email || this.getUserProfile()?.email;
+    if (!this.supabaseClient || !targetEmail) return false;
+    try {
+      const { data, error } = await this.supabaseClient
+        .from('caces_simulacros')
+        .select('*')
+        .eq('user_email', targetEmail)
+        .order('created_at', { ascending: false })
+        .limit(30);
+
+      if (error || !data || data.length === 0) return false;
+
+      const latestSync = data.find(r => r.modo === '__PROFILE_SYNC__' && r.desglose_especialidades);
+      if (latestSync && latestSync.desglose_especialidades) {
+        const snap = latestSync.desglose_especialidades;
+        const localXp = parseInt(localStorage.getItem('caces_xp') || '0', 10);
+        if ((snap.xp || 0) > localXp) {
+          localStorage.setItem('caces_xp', String(snap.xp));
+        }
+        if (snap.highScoreBlitz) {
+          const localHigh = parseInt(localStorage.getItem('caces_blitz_high') || '0', 10);
+          if (snap.highScoreBlitz > localHigh) {
+            localStorage.setItem('caces_blitz_high', String(snap.highScoreBlitz));
+          }
+        }
+        if (snap.errorBank && typeof snap.errorBank === 'object') {
+          const mergedErrors = { ...snap.errorBank, ...this.getErrorBank() };
+          localStorage.setItem('caces_error_bank', JSON.stringify(mergedErrors));
+        }
+      }
+
+      const realExams = data.filter(r => r.modo !== '__PROFILE_SYNC__');
+      if (realExams.length > 0 && this.getExamHistory().length === 0) {
+        const reconstructed = realExams.map(r => ({
+          id: r.id,
+          modo: r.modo,
+          puntuacion: r.puntuacion_obtenida,
+          total: r.total_preguntas,
+          porcentaje: r.porcentaje,
+          tiempo: r.tiempo_segundos,
+          desglose: r.desglose_especialidades || {},
+          fecha: r.created_at
+        }));
+        localStorage.setItem('caces_exam_history', JSON.stringify(reconstructed));
+      }
+      return true;
+    } catch (e) {
+      console.warn('No se pudo recuperar respaldo de la nube:', e);
+      return false;
+    }
+  }
+
+  async testSupabaseConnection() {
+    if (!this.supabaseClient) {
+      this.initSupabase();
+    }
+    if (!this.supabaseClient) {
+      return { success: false, message: "Cliente de Supabase no configurado o credenciales inválidas." };
+    }
+    try {
+      const { error } = await this.supabaseClient.from('caces_questions').select('id').limit(1);
+      if (error) {
+        return { success: false, message: `Error de consulta en Supabase: ${error.message}` };
+      }
+      return { success: true, message: "Conexión exitosa a Supabase. Base de datos sincronizada." };
+    } catch (e) {
+      return { success: false, message: `Excepción de red: ${e.message}` };
+    }
+  }
+
+  deduplicateQuestions(questionsList) {
+    if (!Array.isArray(questionsList)) return [];
+    const map = new Map();
+
+    questionsList.forEach(q => {
+      if (!q) return;
+      const fp = getQuestionFingerprint(q);
+      const key = fp || q.id;
+      if (!key) return;
+
+      if (!map.has(key)) {
+        map.set(key, q);
+      } else {
+        const existing = map.get(key);
+        const existingScore = (existing.justificacion?.length || 0) + (existing.subtema ? 10 : 0);
+        const newScore = (q.justificacion?.length || 0) + (q.subtema ? 10 : 0);
+        if (newScore > existingScore) {
+          map.set(key, { ...existing, ...q });
+        }
+      }
+    });
+
+    return Array.from(map.values());
+  }
+
+  async getAllQuestions() {
+    if (localStorage.getItem('caces_force_empty') === 'true') {
+      return [];
+    }
+
+    let baseQuestions = [];
+    try {
+      const resp = await fetch(`data/banco_inicial.json?nocache=${Date.now()}`, { cache: 'no-store' });
+      if (resp.ok) {
+        baseQuestions = await resp.json();
+      }
+    } catch (e) {
+      console.warn("No se pudo cargar data/banco_inicial.json:", e);
+    }
+
+    let localCustom = [];
+    try {
+      const stored = localStorage.getItem('caces_custom_questions');
+      if (stored) {
+        localCustom = JSON.parse(stored);
+      }
+    } catch (e) {
+      console.warn("Error leyendo caces_custom_questions:", e);
+    }
+
+    let cloudQuestions = [];
+    if (this.supabaseClient) {
+      try {
+        const { data, error } = await this.supabaseClient
+          .from('caces_questions')
+          .select('*');
+        if (!error && data) {
+          cloudQuestions = data;
+        }
+      } catch (e) {
+        console.warn("Error consultando Supabase:", e);
+      }
+    }
+
+    const combined = [...baseQuestions, ...localCustom, ...cloudQuestions];
+    const unique = this.deduplicateQuestions(combined);
+
+    if (localCustom.length > 0) {
+      const cleanCustom = this.deduplicateQuestions(localCustom);
+      if (cleanCustom.length !== localCustom.length) {
+        localStorage.setItem('caces_custom_questions', JSON.stringify(cleanCustom));
+      }
+    }
+
+    return unique.map(q => normalizeQuestionOptions(q));
+  }
+
+  async saveCustomQuestions(newQuestions) {
+    if (!Array.isArray(newQuestions) || newQuestions.length === 0) {
+      return { added: 0, duplicatesSkipped: 0, total: 0 };
+    }
+
+    let existing = [];
+    try {
+      const stored = localStorage.getItem('caces_custom_questions');
+      if (stored) existing = JSON.parse(stored);
+    } catch (e) {}
+
+    existing = this.deduplicateQuestions(existing);
+
+    const existingFpMap = new Map();
+    existing.forEach(q => {
+      const fp = getQuestionFingerprint(q) || q.id;
+      if (fp) existingFpMap.set(fp, q);
+    });
+
+    const trulyNew = [];
+    let duplicatesSkipped = 0;
+
+    newQuestions.forEach(q => {
+      const fp = getQuestionFingerprint(q) || q.id;
+      if (!fp) return;
+
+      if (!existingFpMap.has(fp)) {
+        existingFpMap.set(fp, q);
+        trulyNew.push(q);
+      } else {
+        const oldQ = existingFpMap.get(fp);
+        if (oldQ) {
+          Object.assign(oldQ, q);
+        }
+        duplicatesSkipped++;
+      }
+    });
+
+    const updated = trulyNew.length > 0 ? [...existing, ...trulyNew] : existing;
+    localStorage.setItem('caces_custom_questions', JSON.stringify(updated));
+    localStorage.removeItem('caces_force_empty');
+
+    if (trulyNew.length > 0 && this.supabaseClient) {
+      try {
+        const chunkSize = 100;
+        for (let i = 0; i < trulyNew.length; i += chunkSize) {
+          const slice = trulyNew.slice(i, i + chunkSize);
+          await this.supabaseClient
+            .from('caces_questions')
+            .upsert(slice, { onConflict: 'id' });
+        }
+      } catch (e) {
+        console.error("Excepción al subir a Supabase en lotes:", e);
+      }
+    }
+
+    return {
+      added: trulyNew.length,
+      duplicatesSkipped: duplicatesSkipped,
+      total: existing.length + trulyNew.length
+    };
+  }
+
+  async cleanDuplicates() {
+    let existing = [];
+    try {
+      const stored = localStorage.getItem('caces_custom_questions');
+      if (stored) existing = JSON.parse(stored);
+    } catch (e) {}
+
+    const beforeCount = existing.length;
+    const cleanList = this.deduplicateQuestions(existing);
+    const removedCount = beforeCount - cleanList.length;
+
+    localStorage.setItem('caces_custom_questions', JSON.stringify(cleanList));
+    return {
+      before: beforeCount,
+      after: cleanList.length,
+      removed: removedCount
+    };
+  }
+
+  async saveExamResult(result) {
+    result.id = 'sim_' + Date.now();
+    result.fecha = new Date().toISOString();
+    result.deviceId = this.deviceId;
+
+    const profile = this.getUserProfile();
+
+    let history = this.getExamHistory();
+    history.unshift(result);
+    if (history.length > 100) history = history.slice(0, 100);
+    localStorage.setItem('caces_exam_history', JSON.stringify(history));
+
+    if (this.supabaseClient) {
+      try {
+        await this.supabaseClient.from('caces_simulacros').insert({
+          user_email: profile ? profile.email : `${this.deviceId}@local.caces`,
+          device_id: this.deviceId,
+          modo: result.modo || 'Simulacro CACES',
+          puntuacion_obtenida: result.puntuacion,
+          total_preguntas: result.total,
+          porcentaje: result.porcentaje,
+          tiempo_segundos: result.tiempo,
+          desglose_especialidades: result.desglose || {}
+        });
+      } catch (e) {
+        console.warn("No se pudo guardar historial en Supabase:", e);
+      }
+    }
+
+    this.scheduleAutoCloudSync(500);
+    return result;
+  }
+
+  getExamHistory() {
+    try {
+      const data = localStorage.getItem('caces_exam_history');
+      return data ? JSON.parse(data) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  registerAnswer(questionId, isCorrect) {
+    let errors = this.getErrorBank();
+    if (!isCorrect) {
+      if (!errors[questionId]) {
+        errors[questionId] = { fallos: 1, aciertos_seguidos: 0, ultimo_fallo: Date.now(), dominada: false };
+      } else {
+        errors[questionId].fallos += 1;
+        errors[questionId].aciertos_seguidos = 0;
+        errors[questionId].ultimo_fallo = Date.now();
+        errors[questionId].dominada = false;
+      }
+    } else {
+      if (errors[questionId]) {
+        errors[questionId].aciertos_seguidos = (errors[questionId].aciertos_seguidos || 0) + 1;
+        if (errors[questionId].aciertos_seguidos >= 2) {
+          errors[questionId].dominada = true;
+        }
+      }
+    }
+    localStorage.setItem('caces_error_bank', JSON.stringify(errors));
+    this.scheduleAutoCloudSync();
+  }
+
+  markErrorMastered(questionId) {
+    let errors = this.getErrorBank();
+    if (errors[questionId]) {
+      errors[questionId].dominada = true;
+      errors[questionId].aciertos_seguidos = 2;
+      localStorage.setItem('caces_error_bank', JSON.stringify(errors));
+      this.scheduleAutoCloudSync();
+    }
+  }
+
+  removeError(questionId) {
+    let errors = this.getErrorBank();
+    if (errors[questionId]) {
+      delete errors[questionId];
+      localStorage.setItem('caces_error_bank', JSON.stringify(errors));
+      this.scheduleAutoCloudSync();
+    }
+  }
+
+  clearErrors() {
+    localStorage.removeItem('caces_error_bank');
+    this.scheduleAutoCloudSync();
+  }
+
+  async clearDatabase() {
+    localStorage.removeItem('caces_custom_questions');
+    localStorage.removeItem('caces_questions');
+    localStorage.removeItem('custom_questions');
+    localStorage.removeItem('imported_questions');
+    localStorage.removeItem('banco_caces');
+    localStorage.removeItem('questions');
+    localStorage.setItem('caces_force_empty', 'true');
+
+    if (this.supabaseClient) {
+      try {
+        await this.supabaseClient.from('caces_questions').delete().neq('id', '___force_clear___');
+      } catch (e) {
+        console.warn("Error borrando preguntas de Supabase:", e);
+      }
+    }
+  }
+
+  async resetAll() {
+    localStorage.removeItem('caces_custom_questions');
+    localStorage.removeItem('caces_questions');
+    localStorage.removeItem('custom_questions');
+    localStorage.removeItem('imported_questions');
+    localStorage.removeItem('banco_caces');
+    localStorage.removeItem('questions');
+    localStorage.removeItem('caces_exam_history');
+    localStorage.removeItem('caces_error_bank');
+    localStorage.removeItem('caces_bookmarks');
+    localStorage.setItem('caces_force_empty', 'true');
+
+    if (this.supabaseClient) {
+      try {
+        await this.supabaseClient.from('caces_questions').delete().neq('id', '___force_clear___');
+      } catch (e) {
+        console.warn("Error borrando de Supabase:", e);
+      }
+    }
+  }
+
+  getErrorBank() {
+    try {
+      const data = localStorage.getItem('caces_error_bank');
+      return data ? JSON.parse(data) : {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+  toggleBookmark(questionId) {
+    let bookmarks = this.getBookmarks();
+    if (bookmarks.includes(questionId)) {
+      bookmarks = bookmarks.filter(id => id !== questionId);
+    } else {
+      bookmarks.push(questionId);
+    }
+    localStorage.setItem('caces_bookmarks', JSON.stringify(bookmarks));
+    this.scheduleAutoCloudSync();
+    return bookmarks.includes(questionId);
+  }
+
+  isBookmarked(questionId) {
+    return this.getBookmarks().includes(questionId);
+  }
+
+  getBookmarks() {
+    try {
+      const data = localStorage.getItem('caces_bookmarks');
+      return data ? JSON.parse(data) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+}
+
+export const Storage = new StorageManager();
