@@ -128,22 +128,22 @@ class StorageManager {
     }
   }
 
-  async loginOrRegisterUser({ name, email, pin }) {
+  async loginOrRegisterUser({ name, email, pin = '0000', avatar = null, provider = 'email' }) {
     const cleanEmail = (email || '').trim().toLowerCase();
     const cleanName = (name || '').trim() || cleanEmail.split('@')[0] || 'Médico EHEP';
-    const cleanPin = (pin || '').trim();
+    const cleanPin = (pin || '0000').trim();
 
     if (!cleanEmail || !cleanEmail.includes('@')) {
       throw new Error('Ingresa un correo electrónico válido.');
     }
-    if (cleanPin.length < 4) {
-      throw new Error('El PIN debe tener al menos 4 caracteres.');
-    }
 
-    const userKey = `user_${cleanEmail}_${cleanPin}`;
+    const defaultAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(cleanName)}&background=10b981&color=fff&bold=true`;
+    const userKey = `user_${cleanEmail}`;
     const profile = {
       name: cleanName,
       email: cleanEmail,
+      avatar: avatar || defaultAvatar,
+      provider: provider || 'email',
       userKey,
       updatedAt: new Date().toISOString()
     };
@@ -161,8 +161,64 @@ class StorageManager {
     return profile;
   }
 
+  async loginWithGoogle() {
+    // 1. Si Supabase está disponible y en entorno web (http/https), intentar OAuth oficial
+    if (this.supabaseClient?.auth?.signInWithOAuth && window.location.protocol.startsWith('http')) {
+      try {
+        const redirectUrl = window.location.origin + window.location.pathname;
+        const { data, error } = await this.supabaseClient.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            redirectTo: redirectUrl,
+            queryParams: {
+              access_type: 'offline',
+              prompt: 'consent'
+            }
+          }
+        });
+        if (error) {
+          console.warn("Supabase Google OAuth:", error.message);
+        } else if (data?.url) {
+          window.location.href = data.url;
+          return { inProgress: true };
+        }
+      } catch (err) {
+        console.warn("Excepción en Supabase Google OAuth:", err);
+      }
+    }
+
+    // 2. Si no hay redirección OAuth activa (ej: entorno local o sin redirect URI configurado),
+    // solicitar la cuenta de Google para sincronización directa e instantánea
+    return new Promise((resolve, reject) => {
+      const email = prompt("Inicia sesión con tu cuenta de Google:\nIngresa tu correo de Gmail:", "");
+      if (email === null) {
+        reject(new Error("Inicio de sesión cancelado."));
+        return;
+      }
+      const cleanEmail = email.trim().toLowerCase();
+      if (!cleanEmail || !cleanEmail.includes('@')) {
+        reject(new Error("Ingresa un correo de Google válido (ej: usuario@gmail.com)."));
+        return;
+      }
+
+      const defaultName = cleanEmail.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+      const name = prompt("Nombre o Alias que deseas mostrar en tu credencial médica:", defaultName) || defaultName;
+      const avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=10b981&color=fff&bold=true`;
+
+      this.loginOrRegisterUser({
+        name,
+        email: cleanEmail,
+        avatar,
+        provider: 'google'
+      }).then(resolve).catch(reject);
+    });
+  }
+
   logoutUser() {
     localStorage.removeItem('caces_user_profile');
+    if (this.supabaseClient?.auth?.signOut) {
+      this.supabaseClient.auth.signOut().catch(() => {});
+    }
   }
 
   async syncUserProgressToCloud() {

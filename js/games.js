@@ -423,11 +423,13 @@ export class ArcadeManager {
     return { ...current, progress };
   }
 
-  addXP(amount, isCorrectStreak = true) {
+  addXP(amount, isCorrectStreak = true, triggerToast = true) {
     this.xp += amount;
     if (isCorrectStreak) {
       this.streak += 1;
-      this.triggerStreakToast(this.streak);
+      if (triggerToast) {
+        this.triggerStreakToast(this.streak);
+      }
     } else {
       this.streak = 0;
     }

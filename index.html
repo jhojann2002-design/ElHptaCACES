@@ -54,8 +54,9 @@
     }
   </script>
 
-  <!-- CDNs: Supabase, PDF.js, Chart.js, Canvas-Confetti -->
+  <!-- CDNs: Supabase, Google Identity, PDF.js, Chart.js, Canvas-Confetti -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
@@ -243,17 +244,18 @@
       <!-- Tarjeta de Sesión del Usuario en Drawer -->
       <div class="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 space-y-3">
         <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-500 flex items-center justify-center shrink-0">
-            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          <div id="drawer-user-avatar-wrap" class="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-500 flex items-center justify-center shrink-0 overflow-hidden">
+            <img id="drawer-user-avatar" src="" alt="Avatar" class="w-full h-full object-cover hidden">
+            <svg id="drawer-user-default-icon" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
           </div>
           <div class="min-w-0 flex-1">
             <div id="drawer-user-name" class="font-display font-bold text-sm text-slate-900 dark:text-white truncate">Médico en Guardia</div>
-            <div id="drawer-user-status" class="font-mono text-xs text-slate-500 dark:text-slate-400 truncate">Guardado automático activo</div>
+            <div id="drawer-user-status" class="font-mono text-xs text-slate-500 dark:text-slate-400 truncate">Autoguardado en la nube</div>
           </div>
         </div>
         <button id="btn-drawer-open-auth" class="bto-btn w-full py-2.5 px-3 rounded-xl bg-white dark:bg-slate-800 text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400 flex items-center justify-center gap-2">
           <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
-          <span id="drawer-auth-btn-label">Iniciar Sesión / Sincronizar</span>
+          <span id="drawer-auth-btn-label">Iniciar Sesión con Google</span>
         </button>
       </div>
 
@@ -407,10 +409,11 @@
             </div>
           </button>
 
-          <!-- Botón de Perfil / Iniciar Sesión (Con punto de autoguardado) -->
-          <button id="btn-open-auth-modal" type="button" class="bto-btn px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 text-xs font-semibold flex items-center gap-1.5" title="Cuenta y Guardado Automático en la Nube">
+          <!-- Botón de Perfil / Iniciar Sesión (Con punto de autoguardado y avatar) -->
+          <button id="btn-open-auth-modal" type="button" class="bto-btn px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 text-xs font-semibold flex items-center gap-1.5" title="Cuenta y Guardado Automático con Google">
             <span id="auto-sync-dot" class="w-2 h-2 rounded-full bg-emerald-500"></span>
-            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            <img id="header-user-avatar" src="" alt="Avatar" class="w-5 h-5 rounded-full object-cover hidden">
+            <svg id="header-user-default-icon" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
             <span id="header-user-label" class="hidden sm:inline max-w-[110px] truncate">Acceder</span>
           </button>
 
@@ -1667,7 +1670,7 @@
   </div>
 
   <!-- ===================================================================== -->
-  <!-- MODAL 2: INICIO DE SESIÓN Y GUARDADO AUTOMÁTICO EN LA NUBE            -->
+  <!-- MODAL 2: INICIO DE SESIÓN CON GOOGLE Y GUARDADO AUTOMÁTICO EN LA NUBE -->
   <!-- ===================================================================== -->
   <div id="auth-modal" class="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-md hidden flex items-center justify-center p-4">
     <div class="bto-card bg-white dark:bg-bto-panel rounded-3xl w-full max-w-md overflow-hidden">
@@ -1678,7 +1681,7 @@
           </div>
           <div>
             <h3 class="font-display font-bold text-lg">Credencial Médica</h3>
-            <p class="text-xs font-mono text-slate-400">Sincronización automática en la nube</p>
+            <p class="text-xs font-mono text-slate-400">Sincronización con Cuenta Google</p>
           </div>
         </div>
         <button id="btn-close-auth-modal" class="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 text-white flex items-center justify-center font-bold">✕</button>
@@ -1686,44 +1689,85 @@
 
       <div class="p-6 space-y-5">
         <div id="auth-logged-out-view" class="space-y-4">
-          <p class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-            Ingresa tu nombre y correo una sola vez. Todo tu progreso, XP, racha, historial de simulacros y banco de errores se guardará en la nube de forma 100% automática.
-          </p>
-          <div>
-            <label class="block font-mono text-xs font-bold uppercase text-slate-500 mb-1.5">Nombre o Alias Médico:</label>
-            <input type="text" id="auth-name-input" placeholder="Ej: Dr. Demera / Interno ULEAM" class="w-full p-3.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-sm font-semibold">
+          <div class="space-y-1">
+            <h4 class="font-display font-bold text-lg text-slate-900 dark:text-white">Accede a tu Cuenta</h4>
+            <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+              Inicia sesión con Google para respaldar y sincronizar automáticamente tus simulacros, racha, flashcards y banco de errores en todos tus dispositivos.
+            </p>
           </div>
-          <div>
-            <label class="block font-mono text-xs font-bold uppercase text-slate-500 mb-1.5">Correo Electrónico:</label>
-            <input type="email" id="auth-email-input" placeholder="medico@hospital.ec" class="w-full p-3.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-sm font-mono">
-          </div>
-          <div>
-            <label class="block font-mono text-xs font-bold uppercase text-slate-500 mb-1.5">PIN de Acceso (4 a 8 dígitos):</label>
-            <input type="password" id="auth-pin-input" placeholder="••••" class="w-full p-3.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-sm font-mono">
-          </div>
-          <div id="auth-feedback-msg" class="hidden p-3 rounded-xl text-xs font-mono font-bold"></div>
-          <button id="btn-submit-auth" type="button" class="bto-btn w-full py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-display font-bold text-sm uppercase tracking-wider border-transparent">
-            Activar Guardado Automático
+
+          <!-- Botón Destacado: Continuar con Google -->
+          <button id="btn-login-google" type="button" class="w-full py-3.5 px-4 rounded-2xl bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-800 dark:text-white border-2 border-slate-300 dark:border-slate-700 hover:border-emerald-500 font-sans font-bold text-base flex items-center justify-center gap-3 transition-all shadow-sm hover:shadow-md cursor-pointer group">
+            <svg class="w-5 h-5 shrink-0" viewBox="0 0 24 24">
+              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+            </svg>
+            <span>Iniciar Sesión con Google</span>
           </button>
+
+          <div id="google-one-tap-container" class="w-full flex justify-center"></div>
+
+          <!-- Divisor -->
+          <div class="relative flex items-center justify-center my-2">
+            <div class="border-t border-slate-200 dark:border-slate-800 w-full"></div>
+            <span class="bg-white dark:bg-bto-panel px-3 text-[11px] font-mono uppercase text-slate-400 shrink-0">o con Credencial Manual</span>
+          </div>
+
+          <!-- Formulario Manual Alternativo -->
+          <details class="group text-xs">
+            <summary class="font-mono text-xs font-semibold text-slate-500 hover:text-emerald-500 cursor-pointer text-center list-none py-1">
+              › Ingresar con Correo y PIN alternativo
+            </summary>
+            <div class="space-y-3 pt-3">
+              <div>
+                <label class="block font-mono text-[11px] font-bold uppercase text-slate-500 mb-1">Nombre o Alias:</label>
+                <input type="text" id="auth-name-input" placeholder="Ej: Dr. Demera" class="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-sm font-semibold">
+              </div>
+              <div>
+                <label class="block font-mono text-[11px] font-bold uppercase text-slate-500 mb-1">Correo Electrónico:</label>
+                <input type="email" id="auth-email-input" placeholder="medico@hospital.ec" class="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-sm font-mono">
+              </div>
+              <div>
+                <label class="block font-mono text-[11px] font-bold uppercase text-slate-500 mb-1">PIN (4 dígitos):</label>
+                <input type="password" id="auth-pin-input" placeholder="••••" class="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-sm font-mono">
+              </div>
+              <button id="btn-submit-auth" type="button" class="bto-btn w-full py-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-mono text-xs font-bold uppercase tracking-wider">
+                Acceder con Correo y PIN
+              </button>
+            </div>
+          </details>
+
+          <div id="auth-feedback-msg" class="hidden p-3 rounded-xl text-xs font-mono font-bold"></div>
         </div>
 
         <div id="auth-logged-in-view" class="hidden space-y-4">
-          <div class="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 space-y-1.5">
-            <div class="flex items-center justify-between">
-              <span class="font-mono text-[11px] uppercase font-bold text-emerald-500 flex items-center gap-1.5">
-                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
-                <span>Autoguardado en la Nube Activo</span>
-              </span>
+          <div class="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 space-y-3">
+            <div class="flex items-center gap-3">
+              <div id="auth-active-avatar-wrap" class="w-12 h-12 rounded-full overflow-hidden bg-emerald-500 text-slate-950 flex items-center justify-center font-bold text-lg shrink-0">
+                <img id="auth-active-avatar-img" src="" alt="Google Avatar" class="w-full h-full object-cover hidden">
+                <span id="auth-active-avatar-initial">🩺</span>
+              </div>
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2">
+                  <span id="auth-active-name" class="font-display font-bold text-base sm:text-lg text-slate-900 dark:text-white truncate"></span>
+                  <span id="auth-provider-badge" class="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-mono text-[11px] font-bold">Google</span>
+                </div>
+                <div id="auth-active-email" class="font-mono text-xs text-slate-500 truncate"></div>
+              </div>
             </div>
-            <div id="auth-active-name" class="font-display font-bold text-lg text-slate-900 dark:text-white"></div>
-            <div id="auth-active-email" class="font-mono text-xs text-slate-500"></div>
-            <p id="auth-last-sync-text" class="font-mono text-[11px] text-emerald-600 dark:text-emerald-400 pt-1">
-              Tu progreso se respalda automáticamente tras cada pregunta y simulacro.
-            </p>
+            <div class="pt-2 border-t border-emerald-500/20 flex items-center justify-between text-xs font-mono text-emerald-600 dark:text-emerald-400">
+              <span class="flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+                <span>Sincronización en la Nube Activa</span>
+              </span>
+              <button id="btn-force-sync" type="button" class="underline font-bold hover:opacity-80">Sincronizar ahora</button>
+            </div>
           </div>
           <div class="flex flex-col gap-2.5">
-            <button id="btn-logout-auth" type="button" class="bto-btn w-full py-3 rounded-xl bg-rose-500/10 text-rose-500 border-rose-500/25 text-xs font-mono font-bold">
-              Cerrar Sesión en este Dispositivo
+            <button id="btn-logout-auth" type="button" class="bto-btn w-full py-3 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 border-rose-500/25 text-xs font-mono font-bold">
+              Cerrar Sesión
             </button>
           </div>
         </div>
@@ -1879,636 +1923,3 @@
   <script type="module" src="./js/app.js"></script>
 </body>
 </html>
-2. Archivo js/storage.js (Con Guardado en la Nube Automático)Reemplaza el contenido de js/storage.js por este código:   JavaScriptimport { SupabaseConfig } from './supabase-config.js';
-
-/**
- * Genera una firma clínica única e invariable para cualquier pregunta
- * basándose en su enunciado y opciones normalizadas (sin tildes, signos ni mayúsculas).
- */
-export function getQuestionFingerprint(q) {
-  if (!q) return '';
-  const stem = (q.enunciado || q.statement || q.pregunta || '').toString();
-  const normStem = stem
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]/g, '');
-
-  let optText = '';
-  if (q.opciones) {
-    if (Array.isArray(q.opciones)) {
-      optText = q.opciones.map(o => (typeof o === 'string' ? o : o.texto || o.text || '')).sort().join('');
-    } else if (typeof q.opciones === 'object') {
-      optText = Object.values(q.opciones).map(v => (typeof v === 'string' ? v : v.texto || v.text || '')).sort().join('');
-    }
-  }
-  const normOpt = optText
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]/g, '')
-    .substring(0, 60);
-
-  return `${normStem.substring(0, 220)}_${normOpt}`;
-}
-
-/**
- * Normaliza las opciones de cualquier pregunta al formato estándar Array:
- * [ { id: 'A', texto: '...' }, { id: 'B', texto: '...' }, ... ]
- */
-export function normalizeQuestionOptions(q) {
-  if (!q) return q;
-  const letters = ['A', 'B', 'C', 'D', 'E'];
-  let normalized = [];
-  const rawOpts = q.opciones || q.options || q.respuestas || q.answers;
-
-  if (Array.isArray(rawOpts)) {
-    rawOpts.forEach((item, i) => {
-      if (typeof item === 'string') {
-        normalized.push({ id: letters[i] || `${i + 1}`, texto: item.trim() });
-      } else if (typeof item === 'object' && item !== null) {
-        normalized.push({
-          id: (item.id || item.letter || letters[i] || `${i + 1}`).toString().trim().toUpperCase(),
-          texto: (item.texto || item.text || item.value || item.answer || '').toString().trim()
-        });
-      }
-    });
-  } else if (typeof rawOpts === 'object' && rawOpts !== null) {
-    Object.keys(rawOpts).forEach(k => {
-      const val = rawOpts[k];
-      normalized.push({
-        id: k.toString().trim().toUpperCase(),
-        texto: (typeof val === 'string' ? val : (val?.texto || val?.text || '')).toString().trim()
-      });
-    });
-  }
-
-  normalized = normalized.filter(o => o && o.texto && o.texto.length > 0);
-  while (normalized.length < 4) {
-    const nextL = letters[normalized.length];
-    normalized.push({ id: nextL, texto: `Opción adicional ${nextL}` });
-  }
-
-  return {
-    ...q,
-    opciones: normalized.slice(0, 4)
-  };
-}
-
-class StorageManager {
-  constructor() {
-    this.deviceId = this.getOrCreateDeviceId();
-    this.supabaseClient = null;
-    this._autoSyncTimeout = null;
-    this.initSupabase();
-
-    if (localStorage.getItem('caces_master_db_v4_pro') !== 'true') {
-      localStorage.removeItem('caces_force_empty');
-      localStorage.removeItem('caces_custom_questions');
-      localStorage.removeItem('caces_questions');
-      localStorage.removeItem('custom_questions');
-      localStorage.removeItem('imported_questions');
-      localStorage.removeItem('banco_caces');
-      localStorage.setItem('caces_master_db_v4_pro', 'true');
-    }
-
-    // Sincronizar automáticamente cuando el usuario cierra o cambia de pestaña
-    if (typeof window !== 'undefined') {
-      window.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'hidden') {
-          this.syncUserProgressToCloud();
-        }
-      });
-    }
-  }
-
-  getOrCreateDeviceId() {
-    const profile = this.getUserProfile();
-    if (profile && profile.email) {
-      const usrId = `usr_${profile.email}`;
-      localStorage.setItem('caces_device_id', usrId);
-      return usrId;
-    }
-    let id = localStorage.getItem('caces_device_id');
-    if (!id) {
-      id = 'dev_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
-      localStorage.setItem('caces_device_id', id);
-    }
-    return id;
-  }
-
-  initSupabase() {
-    if (SupabaseConfig.isConfigured() && window.supabase) {
-      try {
-        this.supabaseClient = window.supabase.createClient(
-          SupabaseConfig.getUrl(),
-          SupabaseConfig.getAnonKey()
-        );
-      } catch (e) {
-        console.warn("No se pudo inicializar cliente Supabase:", e);
-        this.supabaseClient = null;
-      }
-    } else {
-      this.supabaseClient = null;
-    }
-  }
-
-  // =========================================================================
-  // SISTEMA DE PERFIL DE USUARIO Y GUARDADO AUTOMÁTICO EN LA NUBE
-  // =========================================================================
-  getUserProfile() {
-    try {
-      const raw = localStorage.getItem('caces_user_profile');
-      return raw ? JSON.parse(raw) : null;
-    } catch {
-      return null;
-    }
-  }
-
-  /**
-   * Programa un autoguardado silencioso en segundo plano (con debounce de 2 seg)
-   */
-  scheduleAutoCloudSync(delayMs = 2000) {
-    if (this._autoSyncTimeout) {
-      clearTimeout(this._autoSyncTimeout);
-    }
-    const dot = typeof document !== 'undefined' ? document.getElementById('auto-sync-dot') : null;
-    if (dot) {
-      dot.className = 'w-2 h-2 rounded-full bg-amber-400 animate-ping';
-    }
-    this._autoSyncTimeout = setTimeout(async () => {
-      await this.syncUserProgressToCloud();
-      if (dot) {
-        dot.className = 'w-2 h-2 rounded-full bg-emerald-500';
-      }
-    }, delayMs);
-  }
-
-  async loginOrRegisterUser({ name, email, pin }) {
-    const cleanEmail = (email || '').trim().toLowerCase();
-    const cleanName = (name || '').trim() || cleanEmail.split('@')[0] || 'Médico EHEP';
-    const cleanPin = (pin || '').trim();
-
-    if (!cleanEmail || !cleanEmail.includes('@')) {
-      throw new Error('Ingresa un correo electrónico válido.');
-    }
-    if (cleanPin.length < 4) {
-      throw new Error('El PIN debe tener al menos 4 caracteres.');
-    }
-
-    const userKey = `user_${cleanEmail}_${cleanPin}`;
-    const profile = {
-      name: cleanName,
-      email: cleanEmail,
-      userKey,
-      updatedAt: new Date().toISOString()
-    };
-
-    this.deviceId = `usr_${cleanEmail}`;
-    localStorage.setItem('caces_device_id', this.deviceId);
-    localStorage.setItem('caces_user_profile', JSON.stringify(profile));
-
-    await this.pullUserProgressFromCloud(cleanEmail);
-    await this.syncUserProgressToCloud();
-
-    return profile;
-  }
-
-  logoutUser() {
-    localStorage.removeItem('caces_user_profile');
-  }
-
-  async syncUserProgressToCloud() {
-    if (!this.supabaseClient) return { synced: false };
-
-    const profile = this.getUserProfile();
-    const emailToSync = profile?.email || `${this.deviceId}@local.caces`;
-
-    const snapshot = {
-      xp: parseInt(localStorage.getItem('caces_xp') || '120', 10),
-      streak: parseInt(localStorage.getItem('caces_streak') || '1', 10),
-      highScoreBlitz: parseInt(localStorage.getItem('caces_blitz_high') || '0', 10),
-      errorBank: this.getErrorBank(),
-      srsDeck: JSON.parse(localStorage.getItem('caces_srs_deck') || '{}'),
-      profileName: profile?.name || 'Médico en Guardia',
-      syncedAt: new Date().toISOString()
-    };
-
-    try {
-      await this.supabaseClient.from('caces_simulacros').insert({
-        user_email: emailToSync,
-        device_id: this.deviceId,
-        modo: '__PROFILE_SYNC__',
-        puntuacion_obtenida: snapshot.xp,
-        total_preguntas: snapshot.streak,
-        porcentaje: snapshot.highScoreBlitz,
-        tiempo_segundos: 0,
-        desglose_especialidades: snapshot
-      });
-
-      const syncText = typeof document !== 'undefined' ? document.getElementById('auth-last-sync-text') : null;
-      if (syncText) {
-        const timeStr = new Date().toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' });
-        syncText.textContent = `Último autoguardado en la nube: hoy a las ${timeStr}`;
-      }
-      return { synced: true };
-    } catch (e) {
-      console.warn('Error en autoguardado en la nube:', e);
-      return { synced: false };
-    }
-  }
-
-  async pullUserProgressFromCloud(email) {
-    const targetEmail = email || this.getUserProfile()?.email;
-    if (!this.supabaseClient || !targetEmail) return false;
-    try {
-      const { data, error } = await this.supabaseClient
-        .from('caces_simulacros')
-        .select('*')
-        .eq('user_email', targetEmail)
-        .order('created_at', { ascending: false })
-        .limit(30);
-
-      if (error || !data || data.length === 0) return false;
-
-      const latestSync = data.find(r => r.modo === '__PROFILE_SYNC__' && r.desglose_especialidades);
-      if (latestSync && latestSync.desglose_especialidades) {
-        const snap = latestSync.desglose_especialidades;
-        const localXp = parseInt(localStorage.getItem('caces_xp') || '0', 10);
-        if ((snap.xp || 0) > localXp) {
-          localStorage.setItem('caces_xp', String(snap.xp));
-        }
-        if (snap.highScoreBlitz) {
-          const localHigh = parseInt(localStorage.getItem('caces_blitz_high') || '0', 10);
-          if (snap.highScoreBlitz > localHigh) {
-            localStorage.setItem('caces_blitz_high', String(snap.highScoreBlitz));
-          }
-        }
-        if (snap.errorBank && typeof snap.errorBank === 'object') {
-          const mergedErrors = { ...snap.errorBank, ...this.getErrorBank() };
-          localStorage.setItem('caces_error_bank', JSON.stringify(mergedErrors));
-        }
-      }
-
-      const realExams = data.filter(r => r.modo !== '__PROFILE_SYNC__');
-      if (realExams.length > 0 && this.getExamHistory().length === 0) {
-        const reconstructed = realExams.map(r => ({
-          id: r.id,
-          modo: r.modo,
-          puntuacion: r.puntuacion_obtenida,
-          total: r.total_preguntas,
-          porcentaje: r.porcentaje,
-          tiempo: r.tiempo_segundos,
-          desglose: r.desglose_especialidades || {},
-          fecha: r.created_at
-        }));
-        localStorage.setItem('caces_exam_history', JSON.stringify(reconstructed));
-      }
-      return true;
-    } catch (e) {
-      console.warn('No se pudo recuperar respaldo de la nube:', e);
-      return false;
-    }
-  }
-
-  async testSupabaseConnection() {
-    if (!this.supabaseClient) {
-      this.initSupabase();
-    }
-    if (!this.supabaseClient) {
-      return { success: false, message: "Cliente de Supabase no configurado o credenciales inválidas." };
-    }
-    try {
-      const { error } = await this.supabaseClient.from('caces_questions').select('id').limit(1);
-      if (error) {
-        return { success: false, message: `Error de consulta en Supabase: ${error.message}` };
-      }
-      return { success: true, message: "Conexión exitosa a Supabase. Base de datos sincronizada." };
-    } catch (e) {
-      return { success: false, message: `Excepción de red: ${e.message}` };
-    }
-  }
-
-  deduplicateQuestions(questionsList) {
-    if (!Array.isArray(questionsList)) return [];
-    const map = new Map();
-
-    questionsList.forEach(q => {
-      if (!q) return;
-      const fp = getQuestionFingerprint(q);
-      const key = fp || q.id;
-      if (!key) return;
-
-      if (!map.has(key)) {
-        map.set(key, q);
-      } else {
-        const existing = map.get(key);
-        const existingScore = (existing.justificacion?.length || 0) + (existing.subtema ? 10 : 0);
-        const newScore = (q.justificacion?.length || 0) + (q.subtema ? 10 : 0);
-        if (newScore > existingScore) {
-          map.set(key, { ...existing, ...q });
-        }
-      }
-    });
-
-    return Array.from(map.values());
-  }
-
-  async getAllQuestions() {
-    if (localStorage.getItem('caces_force_empty') === 'true') {
-      return [];
-    }
-
-    let baseQuestions = [];
-    try {
-      const resp = await fetch(`data/banco_inicial.json?nocache=${Date.now()}`, { cache: 'no-store' });
-      if (resp.ok) {
-        baseQuestions = await resp.json();
-      }
-    } catch (e) {
-      console.warn("No se pudo cargar data/banco_inicial.json:", e);
-    }
-
-    let localCustom = [];
-    try {
-      const stored = localStorage.getItem('caces_custom_questions');
-      if (stored) {
-        localCustom = JSON.parse(stored);
-      }
-    } catch (e) {
-      console.warn("Error leyendo caces_custom_questions:", e);
-    }
-
-    let cloudQuestions = [];
-    if (this.supabaseClient) {
-      try {
-        const { data, error } = await this.supabaseClient
-          .from('caces_questions')
-          .select('*');
-        if (!error && data) {
-          cloudQuestions = data;
-        }
-      } catch (e) {
-        console.warn("Error consultando Supabase:", e);
-      }
-    }
-
-    const combined = [...baseQuestions, ...localCustom, ...cloudQuestions];
-    const unique = this.deduplicateQuestions(combined);
-
-    if (localCustom.length > 0) {
-      const cleanCustom = this.deduplicateQuestions(localCustom);
-      if (cleanCustom.length !== localCustom.length) {
-        localStorage.setItem('caces_custom_questions', JSON.stringify(cleanCustom));
-      }
-    }
-
-    return unique.map(q => normalizeQuestionOptions(q));
-  }
-
-  async saveCustomQuestions(newQuestions) {
-    if (!Array.isArray(newQuestions) || newQuestions.length === 0) {
-      return { added: 0, duplicatesSkipped: 0, total: 0 };
-    }
-
-    let existing = [];
-    try {
-      const stored = localStorage.getItem('caces_custom_questions');
-      if (stored) existing = JSON.parse(stored);
-    } catch (e) {}
-
-    existing = this.deduplicateQuestions(existing);
-
-    const existingFpMap = new Map();
-    existing.forEach(q => {
-      const fp = getQuestionFingerprint(q) || q.id;
-      if (fp) existingFpMap.set(fp, q);
-    });
-
-    const trulyNew = [];
-    let duplicatesSkipped = 0;
-
-    newQuestions.forEach(q => {
-      const fp = getQuestionFingerprint(q) || q.id;
-      if (!fp) return;
-
-      if (!existingFpMap.has(fp)) {
-        existingFpMap.set(fp, q);
-        trulyNew.push(q);
-      } else {
-        const oldQ = existingFpMap.get(fp);
-        if (oldQ) {
-          Object.assign(oldQ, q);
-        }
-        duplicatesSkipped++;
-      }
-    });
-
-    const updated = trulyNew.length > 0 ? [...existing, ...trulyNew] : existing;
-    localStorage.setItem('caces_custom_questions', JSON.stringify(updated));
-    localStorage.removeItem('caces_force_empty');
-
-    if (trulyNew.length > 0 && this.supabaseClient) {
-      try {
-        const chunkSize = 100;
-        for (let i = 0; i < trulyNew.length; i += chunkSize) {
-          const slice = trulyNew.slice(i, i + chunkSize);
-          await this.supabaseClient
-            .from('caces_questions')
-            .upsert(slice, { onConflict: 'id' });
-        }
-      } catch (e) {
-        console.error("Excepción al subir a Supabase en lotes:", e);
-      }
-    }
-
-    return {
-      added: trulyNew.length,
-      duplicatesSkipped: duplicatesSkipped,
-      total: existing.length + trulyNew.length
-    };
-  }
-
-  async cleanDuplicates() {
-    let existing = [];
-    try {
-      const stored = localStorage.getItem('caces_custom_questions');
-      if (stored) existing = JSON.parse(stored);
-    } catch (e) {}
-
-    const beforeCount = existing.length;
-    const cleanList = this.deduplicateQuestions(existing);
-    const removedCount = beforeCount - cleanList.length;
-
-    localStorage.setItem('caces_custom_questions', JSON.stringify(cleanList));
-    return {
-      before: beforeCount,
-      after: cleanList.length,
-      removed: removedCount
-    };
-  }
-
-  async saveExamResult(result) {
-    result.id = 'sim_' + Date.now();
-    result.fecha = new Date().toISOString();
-    result.deviceId = this.deviceId;
-
-    const profile = this.getUserProfile();
-
-    let history = this.getExamHistory();
-    history.unshift(result);
-    if (history.length > 100) history = history.slice(0, 100);
-    localStorage.setItem('caces_exam_history', JSON.stringify(history));
-
-    if (this.supabaseClient) {
-      try {
-        await this.supabaseClient.from('caces_simulacros').insert({
-          user_email: profile ? profile.email : `${this.deviceId}@local.caces`,
-          device_id: this.deviceId,
-          modo: result.modo || 'Simulacro CACES',
-          puntuacion_obtenida: result.puntuacion,
-          total_preguntas: result.total,
-          porcentaje: result.porcentaje,
-          tiempo_segundos: result.tiempo,
-          desglose_especialidades: result.desglose || {}
-        });
-      } catch (e) {
-        console.warn("No se pudo guardar historial en Supabase:", e);
-      }
-    }
-
-    this.scheduleAutoCloudSync(500);
-    return result;
-  }
-
-  getExamHistory() {
-    try {
-      const data = localStorage.getItem('caces_exam_history');
-      return data ? JSON.parse(data) : [];
-    } catch (e) {
-      return [];
-    }
-  }
-
-  registerAnswer(questionId, isCorrect) {
-    let errors = this.getErrorBank();
-    if (!isCorrect) {
-      if (!errors[questionId]) {
-        errors[questionId] = { fallos: 1, aciertos_seguidos: 0, ultimo_fallo: Date.now(), dominada: false };
-      } else {
-        errors[questionId].fallos += 1;
-        errors[questionId].aciertos_seguidos = 0;
-        errors[questionId].ultimo_fallo = Date.now();
-        errors[questionId].dominada = false;
-      }
-    } else {
-      if (errors[questionId]) {
-        errors[questionId].aciertos_seguidos = (errors[questionId].aciertos_seguidos || 0) + 1;
-        if (errors[questionId].aciertos_seguidos >= 2) {
-          errors[questionId].dominada = true;
-        }
-      }
-    }
-    localStorage.setItem('caces_error_bank', JSON.stringify(errors));
-    this.scheduleAutoCloudSync();
-  }
-
-  markErrorMastered(questionId) {
-    let errors = this.getErrorBank();
-    if (errors[questionId]) {
-      errors[questionId].dominada = true;
-      errors[questionId].aciertos_seguidos = 2;
-      localStorage.setItem('caces_error_bank', JSON.stringify(errors));
-      this.scheduleAutoCloudSync();
-    }
-  }
-
-  removeError(questionId) {
-    let errors = this.getErrorBank();
-    if (errors[questionId]) {
-      delete errors[questionId];
-      localStorage.setItem('caces_error_bank', JSON.stringify(errors));
-      this.scheduleAutoCloudSync();
-    }
-  }
-
-  clearErrors() {
-    localStorage.removeItem('caces_error_bank');
-    this.scheduleAutoCloudSync();
-  }
-
-  async clearDatabase() {
-    localStorage.removeItem('caces_custom_questions');
-    localStorage.removeItem('caces_questions');
-    localStorage.removeItem('custom_questions');
-    localStorage.removeItem('imported_questions');
-    localStorage.removeItem('banco_caces');
-    localStorage.removeItem('questions');
-    localStorage.setItem('caces_force_empty', 'true');
-
-    if (this.supabaseClient) {
-      try {
-        await this.supabaseClient.from('caces_questions').delete().neq('id', '___force_clear___');
-      } catch (e) {
-        console.warn("Error borrando preguntas de Supabase:", e);
-      }
-    }
-  }
-
-  async resetAll() {
-    localStorage.removeItem('caces_custom_questions');
-    localStorage.removeItem('caces_questions');
-    localStorage.removeItem('custom_questions');
-    localStorage.removeItem('imported_questions');
-    localStorage.removeItem('banco_caces');
-    localStorage.removeItem('questions');
-    localStorage.removeItem('caces_exam_history');
-    localStorage.removeItem('caces_error_bank');
-    localStorage.removeItem('caces_bookmarks');
-    localStorage.setItem('caces_force_empty', 'true');
-
-    if (this.supabaseClient) {
-      try {
-        await this.supabaseClient.from('caces_questions').delete().neq('id', '___force_clear___');
-      } catch (e) {
-        console.warn("Error borrando de Supabase:", e);
-      }
-    }
-  }
-
-  getErrorBank() {
-    try {
-      const data = localStorage.getItem('caces_error_bank');
-      return data ? JSON.parse(data) : {};
-    } catch (e) {
-      return {};
-    }
-  }
-
-  toggleBookmark(questionId) {
-    let bookmarks = this.getBookmarks();
-    if (bookmarks.includes(questionId)) {
-      bookmarks = bookmarks.filter(id => id !== questionId);
-    } else {
-      bookmarks.push(questionId);
-    }
-    localStorage.setItem('caces_bookmarks', JSON.stringify(bookmarks));
-    this.scheduleAutoCloudSync();
-    return bookmarks.includes(questionId);
-  }
-
-  isBookmarked(questionId) {
-    return this.getBookmarks().includes(questionId);
-  }
-
-  getBookmarks() {
-    try {
-      const data = localStorage.getItem('caces_bookmarks');
-      return data ? JSON.parse(data) : [];
-    } catch (e) {
-      return [];
-    }
-  }
-}
-
-export const Storage = new StorageManager();

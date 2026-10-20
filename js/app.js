@@ -130,8 +130,10 @@ class AppController {
 
     // Enlazar autoguardado en la nube cada vez que cambie el XP o la racha
     const origAddXP = this.arcade.addXP.bind(this.arcade);
-    this.arcade.addXP = (amount, isCorrectStreak = true) => {
-      origAddXP(amount, isCorrectStreak);
+    this.arcade.addXP = (amount, isCorrectStreak = true, triggerToast = true) => {
+      // En modo simulador formal ('caces'), no disparar jamás felicitaciones ni toasts de racha
+      const isSimulacro = this.engine && this.engine.mode === 'caces';
+      origAddXP(amount, isCorrectStreak, isSimulacro ? false : triggerToast);
       Storage.scheduleAutoCloudSync();
     };
   }
@@ -209,6 +211,39 @@ class AppController {
     if (keyInput) keyInput.value = SupabaseConfig.getAnonKey();
 
     this.checkCloudStatus();
+
+    // Sincronización automática de sesión con Google / Supabase
+    if (Storage.supabaseClient?.auth) {
+      Storage.supabaseClient.auth.getSession().then(({ data: { session } }) => {
+        if (session && session.user) {
+          const u = session.user;
+          const name = u.user_metadata?.full_name || u.user_metadata?.name || u.email?.split('@')[0] || 'Médico EHEP';
+          const email = u.email;
+          const avatar = u.user_metadata?.avatar_url || u.user_metadata?.picture;
+          Storage.loginOrRegisterUser({ name, email, avatar, provider: 'google' }).then(() => {
+            this.refreshAuthUI();
+            this.arcade.updateHUD();
+          });
+        }
+      }).catch(err => console.warn('Supabase session check:', err));
+
+      Storage.supabaseClient.auth.onAuthStateChange((event, session) => {
+        if (session && session.user) {
+          const u = session.user;
+          const name = u.user_metadata?.full_name || u.user_metadata?.name || u.email?.split('@')[0] || 'Médico EHEP';
+          const email = u.email;
+          const avatar = u.user_metadata?.avatar_url || u.user_metadata?.picture;
+          Storage.loginOrRegisterUser({ name, email, avatar, provider: 'google' }).then(() => {
+            this.refreshAuthUI();
+            this.arcade.updateHUD();
+          });
+        }
+      });
+    }
+
+    if (window.location.hash && window.location.hash.includes('access_token')) {
+      window.history.replaceState(null, null, window.location.pathname);
+    }
   }
 
   // =========================================================================
@@ -437,7 +472,7 @@ class AppController {
   }
 
   // =========================================================================
-  // SISTEMA DE INICIO DE SESIÓN Y GUARDADO AUTOMÁTICO EN LA NUBE
+  // SISTEMA DE INICIO DE SESIÓN CON GOOGLE Y GUARDADO AUTOMÁTICO EN LA NUBE
   // =========================================================================
   bindAuthModal() {
     const modal = document.getElementById('auth-modal');
@@ -465,24 +500,57 @@ class AppController {
       msgEl.textContent = txt;
     };
 
+    // 1. Inicio de Sesión con Google
+    document.getElementById('btn-login-google')?.addEventListener('click', async () => {
+      try {
+        showMsg('Conectando con Google...', false);
+        const profile = await Storage.loginWithGoogle();
+        if (profile && !profile.inProgress) {
+          this.arcade.xp = parseInt(localStorage.getItem('caces_xp') || '120', 10);
+          this.arcade.highScoreBlitz = parseInt(localStorage.getItem('caces_blitz_high') || '0', 10);
+          this.arcade.updateHUD();
+          this.refreshAuthUI();
+          msgEl?.classList.add('hidden');
+          modal?.classList.add('hidden');
+        }
+      } catch (err) {
+        showMsg(err.message || 'Error al autenticar con Google.', true);
+      }
+    });
+
+    // 2. Inicio de Sesión Manual Alternativo
     document.getElementById('btn-submit-auth')?.addEventListener('click', async () => {
       const name = document.getElementById('auth-name-input')?.value || '';
       const email = document.getElementById('auth-email-input')?.value || '';
       const pin = document.getElementById('auth-pin-input')?.value || '';
 
       try {
-        showMsg('Activando sincronización automática en la nube...', false);
+        showMsg('Activando sincronización en la nube...', false);
         await Storage.loginOrRegisterUser({ name, email, pin });
         this.arcade.xp = parseInt(localStorage.getItem('caces_xp') || '120', 10);
         this.arcade.highScoreBlitz = parseInt(localStorage.getItem('caces_blitz_high') || '0', 10);
         this.arcade.updateHUD();
         this.refreshAuthUI();
         msgEl?.classList.add('hidden');
+        modal?.classList.add('hidden');
       } catch (err) {
         showMsg(err.message || 'Error al iniciar sesión.', true);
       }
     });
 
+    // 3. Forzar sincronización manual
+    document.getElementById('btn-force-sync')?.addEventListener('click', async () => {
+      showMsg('Sincronizando datos con la nube...', false);
+      const res = await Storage.syncUserProgressToCloud();
+      if (res && res.synced) {
+        showMsg('✅ Sincronización con la nube completada.', false);
+      } else {
+        showMsg('✅ Progreso respaldado correctamente.', false);
+      }
+      setTimeout(() => msgEl?.classList.add('hidden'), 2500);
+    });
+
+    // 4. Cerrar Sesión
     document.getElementById('btn-logout-auth')?.addEventListener('click', () => {
       Storage.logoutUser();
       this.refreshAuthUI();
@@ -492,28 +560,67 @@ class AppController {
   refreshAuthUI() {
     const profile = Storage.getUserProfile();
     const headerLabel = document.getElementById('header-user-label');
+    const headerAvatar = document.getElementById('header-user-avatar');
+    const headerIcon = document.getElementById('header-user-default-icon');
+
     const drawerName = document.getElementById('drawer-user-name');
     const drawerStatus = document.getElementById('drawer-user-status');
     const drawerBtnLabel = document.getElementById('drawer-auth-btn-label');
+    const drawerAvatar = document.getElementById('drawer-user-avatar');
+    const drawerIcon = document.getElementById('drawer-user-default-icon');
+
     const loggedOutView = document.getElementById('auth-logged-out-view');
     const loggedInView = document.getElementById('auth-logged-in-view');
     const activeName = document.getElementById('auth-active-name');
     const activeEmail = document.getElementById('auth-active-email');
+    const activeAvatarImg = document.getElementById('auth-active-avatar-img');
+    const activeAvatarInit = document.getElementById('auth-active-avatar-initial');
+    const providerBadge = document.getElementById('auth-provider-badge');
 
     if (profile) {
       if (headerLabel) headerLabel.textContent = profile.name;
+      if (headerAvatar && profile.avatar) {
+        headerAvatar.src = profile.avatar;
+        headerAvatar.classList.remove('hidden');
+        headerIcon?.classList.add('hidden');
+      } else {
+        headerAvatar?.classList.add('hidden');
+        headerIcon?.classList.remove('hidden');
+      }
+
       if (drawerName) drawerName.textContent = profile.name;
-      if (drawerStatus) drawerStatus.textContent = `${profile.email} • Autoguardado`;
-      if (drawerBtnLabel) drawerBtnLabel.textContent = 'Ver Credencial Activa';
+      if (drawerStatus) drawerStatus.textContent = `${profile.email} • Cuenta Conectada`;
+      if (drawerBtnLabel) drawerBtnLabel.textContent = 'Ver Credencial Médica';
+      if (drawerAvatar && profile.avatar) {
+        drawerAvatar.src = profile.avatar;
+        drawerAvatar.classList.remove('hidden');
+        drawerIcon?.classList.add('hidden');
+      } else {
+        drawerAvatar?.classList.add('hidden');
+        drawerIcon?.classList.remove('hidden');
+      }
+
       loggedOutView?.classList.add('hidden');
       loggedInView?.classList.remove('hidden');
       if (activeName) activeName.textContent = profile.name;
       if (activeEmail) activeEmail.textContent = profile.email;
+      if (activeAvatarImg && profile.avatar) {
+        activeAvatarImg.src = profile.avatar;
+        activeAvatarImg.classList.remove('hidden');
+        activeAvatarInit?.classList.add('hidden');
+      }
+      if (providerBadge) {
+        providerBadge.textContent = profile.provider === 'google' ? 'Google' : 'Credencial';
+      }
     } else {
       if (headerLabel) headerLabel.textContent = 'Acceder';
+      headerAvatar?.classList.add('hidden');
+      headerIcon?.classList.remove('hidden');
       if (drawerName) drawerName.textContent = 'Médico en Guardia';
       if (drawerStatus) drawerStatus.textContent = 'Autoguardado local activo';
-      if (drawerBtnLabel) drawerBtnLabel.textContent = 'Iniciar Sesión / Sincronizar';
+      if (drawerBtnLabel) drawerBtnLabel.textContent = 'Iniciar Sesión con Google';
+      drawerAvatar?.classList.add('hidden');
+      drawerIcon?.classList.remove('hidden');
       loggedOutView?.classList.remove('hidden');
       loggedInView?.classList.add('hidden');
     }
@@ -842,19 +949,23 @@ class AppController {
     this.engine.selectAnswer(optionId);
 
     if (!alreadyAnswered) {
-      if (optionId === q.correcta) {
-        this.arcade.playTone('correct');
-        const prevStreak = this.arcade.streak;
-        this.arcade.addXP(10, true);
-
-        if ((this.engine.mode === 'study' || this.engine.mode === 'errors') && prevStreak === 0) {
-          this.arcade.triggerTutorCelebration();
-        }
-      } else if (this.engine.mode !== 'caces') {
-        this.arcade.playTone('wrong');
-        this.arcade.addXP(0, false);
-      } else {
+      if (this.engine.mode === 'caces') {
+        // En el Simulador Oficial CACES: experiencia formal de examen, neutra y sin felicitaciones
         this.arcade.playTone('beep');
+      } else {
+        // En Modo Estudio / Tutor o La Morgue (Errores): Feedback y felicitaciones por racha
+        if (optionId === q.correcta) {
+          this.arcade.playTone('correct');
+          const prevStreak = this.arcade.streak;
+          this.arcade.addXP(10, true, true);
+
+          if (prevStreak === 0) {
+            this.arcade.triggerTutorCelebration();
+          }
+        } else {
+          this.arcade.playTone('wrong');
+          this.arcade.addXP(0, false, false);
+        }
       }
     }
   }
@@ -1129,8 +1240,7 @@ class AppController {
     const statusBadge = document.getElementById('res-status-badge');
     if (statusBadge) {
       if (summary.aprobado) {
-        this.arcade.addXP(100, true);
-        if (window.confetti) window.confetti({ particleCount: 120, spread: 80 });
+        this.arcade.addXP(100, false, false);
         statusBadge.className = 'inline-block px-5 py-2 rounded-full font-mono text-sm font-bold bg-emerald-500 text-slate-950';
         statusBadge.textContent = `HABILITADO CACES: ${cacesPts} / 1000 PTS (≥ 700 pts requeridos • +100 XP)`;
       } else {
