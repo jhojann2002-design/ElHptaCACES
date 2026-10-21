@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="es" class="h-full dark">
+<html lang="es" class="h-full dark overflow-x-hidden">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>EL HPTA CACES | Suite Clínica & Simulador EHEP Ecuador</title>
   
   <!-- PWA & Mobile Web App Meta -->
@@ -54,10 +54,11 @@
     }
   </script>
 
-  <!-- CDNs: Supabase, Google Identity, PDF.js, Chart.js, Canvas-Confetti -->
+  <!-- CDNs: Supabase, Google Identity, PDF.js, jsPDF, Chart.js, Canvas-Confetti -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
 
@@ -71,6 +72,11 @@
       --bg-subtle-grid: rgba(255, 255, 255, 0.02);
       --card-border: rgba(51, 65, 85, 0.65);
       --card-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.6);
+    }
+
+    html, body {
+      max-width: 100vw;
+      overflow-x: hidden;
     }
 
     body {
@@ -215,7 +221,7 @@
   </style>
 </head>
 
-<body class="bg-bto-paper dark:bg-bto-dark text-slate-900 dark:text-slate-100 min-h-full flex flex-col font-sans antialiased selection:bg-emerald-500 selection:text-white transition-colors duration-200">
+<body class="bg-bto-paper dark:bg-bto-dark text-slate-900 dark:text-slate-100 min-h-full flex flex-col font-sans antialiased selection:bg-emerald-500 selection:text-white transition-colors duration-200 overflow-x-hidden">
 
   <!-- ===================================================================== -->
   <!-- MENÚ LATERAL IZQUIERDO (DRAWER HAMBURGUESA: ESCALAS, STATS, RANGOS)   -->
@@ -347,30 +353,30 @@
   </aside>
 
   <!-- ===================================================================== -->
-  <!-- HEADER EJECUTIVO PRINCIPAL                                            -->
+  <!-- HEADER EJECUTIVO PRINCIPAL (COMPACTO EN CELULAR SIN OVERFLOW)         -->
   <!-- ===================================================================== -->
-  <header class="bg-white/90 dark:bg-bto-panel/90 backdrop-blur-xl border-b border-slate-200/80 dark:border-slate-800/80 sticky top-0 z-40">
-    <div class="max-w-[1440px] mx-auto px-3 sm:px-6 lg:px-8">
+  <header class="bg-white/90 dark:bg-bto-panel/90 backdrop-blur-xl border-b border-slate-200/80 dark:border-slate-800/80 sticky top-0 z-40 w-full">
+    <div class="max-w-[1440px] w-full mx-auto px-2.5 sm:px-6 lg:px-8">
       
       <!-- NIVEL 1: Botón Hamburguesa + Identidad + Dial + Rango + Perfil -->
-      <div class="py-2.5 sm:py-3 flex items-center justify-between gap-2">
+      <div class="py-2 sm:py-3 flex items-center justify-between gap-1.5 sm:gap-2 min-w-0">
         
         <!-- Izquierda: Botón Hamburguesa + Identidad de Marca -->
-        <div class="flex items-center gap-2 sm:gap-3 shrink-0">
-          <button id="btn-open-drawer" type="button" class="bto-btn w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-100 dark:bg-slate-900 flex items-center justify-center text-slate-700 dark:text-slate-200" title="Abrir Menú de Escalas, Estadísticas y Rangos">
-            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        <div class="flex items-center gap-1.5 sm:gap-3 min-w-0 shrink">
+          <button id="btn-open-drawer" type="button" class="bto-btn w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-slate-100 dark:bg-slate-900 flex items-center justify-center text-slate-700 dark:text-slate-200 shrink-0" title="Abrir Menú de Escalas, Estadísticas y Rangos">
+            <svg class="w-4 h-4 sm:w-5 sm:h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
           </button>
 
-          <div id="brand-logo-trigger" class="flex items-center gap-2.5 cursor-pointer select-none" title="EL HPTA CACES">
-            <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white shadow-lg shadow-emerald-500/20">
-              <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+          <div id="brand-logo-trigger" class="flex items-center gap-2 cursor-pointer select-none min-w-0" title="EL HPTA CACES">
+            <div class="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white shadow-lg shadow-emerald-500/20 shrink-0">
+              <svg class="w-4 h-4 sm:w-5 sm:h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
             </div>
-            <div>
-              <div class="flex items-center gap-2">
-                <h1 class="font-display font-bold text-base sm:text-xl tracking-tight text-slate-900 dark:text-white">
+            <div class="min-w-0">
+              <div class="flex items-center gap-1.5 min-w-0">
+                <h1 class="font-display font-bold text-sm sm:text-xl tracking-tight text-slate-900 dark:text-white truncate">
                   EL HPTA <span class="text-emerald-600 dark:text-emerald-400">CACES</span>
                 </h1>
-                <span class="hidden md:inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                <span class="hidden md:inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 shrink-0">
                   EHEP.EC
                 </span>
               </div>
@@ -379,7 +385,7 @@
         </div>
 
         <!-- Centro: DIAL INTERACTIVO (MODO SIMULADOR vs MODO ESTUDIO) -->
-        <div class="hidden lg:flex items-center">
+        <div class="hidden lg:flex items-center shrink-0">
           <div id="header-mode-dial" class="mode-dial-wrapper" data-active-mode="simulacro">
             <div class="mode-dial-pill"></div>
             <button type="button" data-dial-mode="simulacro" class="mode-dial-btn px-5 py-1.5 rounded-xl font-display font-bold text-xs sm:text-sm flex items-center justify-center gap-2 text-slate-950">
@@ -393,87 +399,87 @@
           </div>
         </div>
 
-        <!-- Derecha: Rango Clínico + Botón Perfil + Sonido + Tema -->
-        <div class="flex items-center gap-1.5 sm:gap-2">
+        <!-- Derecha: Rango Clínico + Botón Perfil + Sonido + Tema (Ajustado para móviles) -->
+        <div class="flex items-center gap-1 sm:gap-2 shrink-0">
           
-          <!-- Badge de Rango Clínico (Abre modal explicativo de los 5 rangos) -->
-          <button id="user-xp-hud" type="button" class="flex items-center gap-2 sm:gap-3 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-slate-100/90 dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 hover:border-emerald-500/60 transition-colors" title="Ver Jerarquía de Rangos Clínicos">
-            <div class="flex items-center gap-1 font-mono text-xs sm:text-sm font-bold text-amber-500">
-              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          <!-- Badge de Rango Clínico -->
+          <button id="user-xp-hud" type="button" class="flex items-center gap-1 sm:gap-2.5 px-2 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-slate-100/90 dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 hover:border-emerald-500/60 transition-colors shrink-0" title="Ver Jerarquía de Rangos Clínicos">
+            <div class="flex items-center gap-0.5 font-mono text-[11px] sm:text-sm font-bold text-amber-500">
+              <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
               <span id="hud-streak">0</span>
             </div>
             <span class="text-slate-300 dark:text-slate-700 hidden sm:inline">|</span>
-            <div class="flex items-center gap-1.5">
-              <span id="hud-rank-title" class="hidden sm:inline text-xs sm:text-sm font-bold text-slate-800 dark:text-emerald-400">Interno Rotativo</span>
-              <span id="hud-xp-badge" class="font-mono text-[11px] sm:text-xs font-semibold px-2 py-0.5 bg-slate-900 text-white dark:bg-slate-800 dark:text-slate-200 rounded-md">0 XP</span>
+            <div class="flex items-center gap-1">
+              <span id="hud-rank-title" class="hidden md:inline text-xs sm:text-sm font-bold text-slate-800 dark:text-emerald-400">Interno Rotativo</span>
+              <span id="hud-xp-badge" class="font-mono text-[10px] sm:text-xs font-semibold px-1.5 sm:px-2 py-0.5 bg-slate-900 text-white dark:bg-slate-800 dark:text-slate-200 rounded-md">0 XP</span>
             </div>
           </button>
 
-          <!-- Botón de Perfil / Iniciar Sesión (Con punto de autoguardado y avatar) -->
-          <button id="btn-open-auth-modal" type="button" class="bto-btn px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 text-xs font-semibold flex items-center gap-1.5" title="Cuenta y Guardado Automático con Google">
-            <span id="auto-sync-dot" class="w-2 h-2 rounded-full bg-emerald-500"></span>
-            <img id="header-user-avatar" src="" alt="Avatar" class="w-5 h-5 rounded-full object-cover hidden">
-            <svg id="header-user-default-icon" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-            <span id="header-user-label" class="hidden sm:inline max-w-[110px] truncate">Acceder</span>
+          <!-- Botón de Perfil / Iniciar Sesión -->
+          <button id="btn-open-auth-modal" type="button" class="bto-btn px-2 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 text-xs font-semibold flex items-center gap-1.5 shrink-0" title="Cuenta y Guardado Automático con Google">
+            <span id="auto-sync-dot" class="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-emerald-500 shrink-0"></span>
+            <img id="header-user-avatar" src="" alt="Avatar" class="w-4 h-4 sm:w-5 sm:h-5 rounded-full object-cover hidden shrink-0">
+            <svg id="header-user-default-icon" class="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            <span id="header-user-label" class="hidden sm:inline max-w-[100px] truncate">Acceder</span>
           </button>
 
           <!-- Matriz Oficial CACES -->
-          <button id="btn-open-syllabus-modal" class="bto-btn hidden md:flex px-2.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-200 text-xs font-semibold items-center gap-1.5" title="Ver Matriz Oficial CACES">
+          <button id="btn-open-syllabus-modal" class="bto-btn hidden md:flex px-2.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-200 text-xs font-semibold items-center gap-1.5 shrink-0" title="Ver Matriz Oficial CACES">
             <svg class="w-4 h-4 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
             <span class="hidden xl:inline">Matriz</span>
           </button>
 
           <!-- Sonido SFX -->
-          <button id="btn-sfx-toggle" class="bto-btn w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-slate-100 dark:bg-slate-900 flex items-center justify-center text-slate-700 dark:text-slate-200" title="Activar/Silenciar Efectos de Sonido">
+          <button id="btn-sfx-toggle" class="bto-btn w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-slate-100 dark:bg-slate-900 flex items-center justify-center text-slate-700 dark:text-slate-200 shrink-0" title="Activar/Silenciar Efectos de Sonido">
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
           </button>
 
           <!-- Tema Claro/Oscuro -->
-          <button id="btn-theme-toggle" class="bto-btn w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-slate-100 dark:bg-slate-900 flex items-center justify-center text-slate-700 dark:text-slate-200" title="Cambiar Tema Claro/Oscuro">
+          <button id="btn-theme-toggle" class="bto-btn w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-slate-100 dark:bg-slate-900 flex items-center justify-center text-slate-700 dark:text-slate-200 shrink-0" title="Cambiar Tema Claro/Oscuro">
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
           </button>
         </div>
       </div>
 
       <!-- Dial Móvil (Visible en pantallas pequeñas/medianas) -->
-      <div class="lg:hidden py-2 flex justify-center border-t border-slate-200/60 dark:border-slate-800/60">
+      <div class="lg:hidden py-1.5 flex justify-center border-t border-slate-200/60 dark:border-slate-800/60">
         <div id="mobile-mode-dial" class="mode-dial-wrapper w-full max-w-md" data-active-mode="simulacro">
           <div class="mode-dial-pill"></div>
-          <button type="button" data-dial-mode="simulacro" class="mode-dial-btn py-2 rounded-xl font-display font-bold text-xs flex items-center justify-center gap-1.5 text-slate-950">
+          <button type="button" data-dial-mode="simulacro" class="mode-dial-btn py-1.5 rounded-xl font-display font-bold text-xs flex items-center justify-center gap-1.5 text-slate-950">
             <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/></svg>
             <span>Modo Simulador</span>
           </button>
-          <button type="button" data-dial-mode="estudio" class="mode-dial-btn py-2 rounded-xl font-display font-bold text-xs flex items-center justify-center gap-1.5 text-slate-600 dark:text-slate-300">
+          <button type="button" data-dial-mode="estudio" class="mode-dial-btn py-1.5 rounded-xl font-display font-bold text-xs flex items-center justify-center gap-1.5 text-slate-600 dark:text-slate-300">
             <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
             <span>Modo Estudio</span>
           </button>
         </div>
       </div>
 
-      <!-- NIVEL 2: BARRA EXCLUSIVA DEL MODO ESTUDIO (OCULTA EN MODO SIMULADOR) -->
+      <!-- NIVEL 2: BARRA EXCLUSIVA DEL MODO ESTUDIO (SE OCULTA AUTOMÁTICAMENTE DURANTE EL TUTOR ACTIVO) -->
       <div id="study-mode-navbar" class="hidden py-1.5 sm:py-2 border-t border-slate-200/70 dark:border-slate-800/80">
         <nav class="grid grid-cols-3 sm:grid-cols-6 gap-1.5 sm:gap-2">
-          <button data-tab-target="simulacro" class="nav-tab-btn nav-tab-active px-2 py-2 sm:px-3.5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold border border-transparent text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 flex items-center justify-center gap-2 transition-all">
+          <button data-tab-target="simulacro" class="nav-tab-btn nav-tab-active px-2 py-2 sm:px-3.5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold border border-transparent text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 flex items-center justify-center gap-1.5 transition-all">
             <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
             <span class="truncate">Tutor Clínico</span>
           </button>
-          <button data-tab-target="temario" class="nav-tab-btn px-2 py-2 sm:px-3.5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold border border-transparent text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 flex items-center justify-center gap-2 transition-all">
+          <button data-tab-target="temario" class="nav-tab-btn px-2 py-2 sm:px-3.5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold border border-transparent text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 flex items-center justify-center gap-1.5 transition-all">
             <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>
             <span class="truncate">Temario</span>
           </button>
-          <button data-tab-target="explorador" class="nav-tab-btn px-2 py-2 sm:px-3.5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold border border-transparent text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 flex items-center justify-center gap-2 transition-all">
+          <button data-tab-target="explorador" class="nav-tab-btn px-2 py-2 sm:px-3.5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold border border-transparent text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 flex items-center justify-center gap-1.5 transition-all">
             <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <span class="truncate">Explorador</span>
           </button>
-          <button data-tab-target="flashcards" class="nav-tab-btn px-2 py-2 sm:px-3.5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold border border-transparent text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 flex items-center justify-center gap-2 transition-all">
+          <button data-tab-target="flashcards" class="nav-tab-btn px-2 py-2 sm:px-3.5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold border border-transparent text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 flex items-center justify-center gap-1.5 transition-all">
             <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 10h20"/></svg>
             <span class="truncate">Cards</span>
           </button>
-          <button data-tab-target="errores" class="nav-tab-btn px-2 py-2 sm:px-3.5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold border border-transparent text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 flex items-center justify-center gap-2 transition-all">
+          <button data-tab-target="errores" class="nav-tab-btn px-2 py-2 sm:px-3.5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold border border-transparent text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 flex items-center justify-center gap-1.5 transition-all">
             <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
             <span class="truncate">Morgue</span>
           </button>
-          <button data-tab-target="arcade" class="nav-tab-btn px-2 py-2 sm:px-3.5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold border border-transparent text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 flex items-center justify-center gap-2 transition-all">
+          <button data-tab-target="arcade" class="nav-tab-btn px-2 py-2 sm:px-3.5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold border border-transparent text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 flex items-center justify-center gap-1.5 transition-all">
             <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 12h4m-2-2v4m7-1h.01M18 11h.01"/></svg>
             <span class="truncate">Arcade</span>
           </button>
@@ -487,7 +493,7 @@
   <!-- ===================================================================== -->
   <!-- WORKSPACE PRINCIPAL                                                   -->
   <!-- ===================================================================== -->
-  <main class="flex-1 max-w-[1440px] w-full mx-auto p-4 sm:p-6 lg:p-8">
+  <main class="flex-1 max-w-[1440px] w-full mx-auto p-3 sm:p-6 lg:p-8">
 
     <!-- =================================================================== -->
     <!-- TAB 1: SIMULADOR / MODO ESTUDIO (DIFERENCIADOS POR EL DIAL)         -->
@@ -500,7 +506,7 @@
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
           
           <!-- Panel Principal (8 cols) -->
-          <div class="lg:col-span-8 bto-card rounded-3xl bg-white dark:bg-bto-panel p-7 sm:p-10 flex flex-col justify-between relative overflow-hidden">
+          <div class="lg:col-span-8 bto-card rounded-3xl bg-white dark:bg-bto-panel p-6 sm:p-10 flex flex-col justify-between relative overflow-hidden">
             
             <!-- SUB-PANEL A: MODO SIMULADOR (SOLO SIMULACIÓN DEL EXAMEN REAL) -->
             <div id="setup-panel-simulacro" class="space-y-6 flex-1 flex flex-col justify-between">
@@ -601,7 +607,7 @@
                 </div>
 
                 <button id="btn-start-study" class="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-sky-500 to-emerald-500 hover:from-sky-600 hover:to-emerald-600 text-white font-display font-bold text-base sm:text-lg tracking-wide shadow-lg shadow-sky-500/25 transition-all flex items-center justify-center gap-3">
-                  <span>Iniciar Práctica en Modo Estudio</span>
+                  <span>Iniciar Práctica en Modo Tutor</span>
                   <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
                 </button>
               </div>
@@ -622,7 +628,7 @@
                 <div class="p-4 rounded-2xl bg-slate-800/70 border border-slate-700/80">
                   <span class="font-mono text-xs text-slate-400 uppercase block mb-1">Duración</span>
                   <span id="caces-duration-label" class="font-display text-2xl font-bold text-white block">3 Horas</span>
-                  <span class="font-mono text-xs text-emerald-400 mt-1 block">108 seg / reactivo</span>
+                  <span class="font-mono text-xs text-emerald-400 mt-1 block">108 seg / pregunta</span>
                 </div>
                 <div class="p-4 rounded-2xl bg-slate-800/70 border border-slate-700/80">
                   <span class="font-mono text-xs text-slate-400 uppercase block mb-1">Aprobación</span>
@@ -644,11 +650,11 @@
               </div>
               <h3 class="font-display font-bold text-lg text-slate-900 dark:text-white">Examen Cerrado Sin Pistas</h3>
               <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
-                En Modo Simulador las respuestas y perlas permanecen ocultas hasta finalizar el intento. Para usar Cards, Temario, Morgue o Arcade, gira el dial superior a <b>Modo Estudio</b>.
+                En Modo Simulador las respuestas y perlas permanecen ocultas hasta finalizar el intento. Si recargas la página, tu intento y cronómetro se conservan intactos.
               </p>
             </div>
 
-            <!-- Tarjeta Lateral Modo Estudio: Acceso Destacado al Arcade (Oculta en Modo Simulador) -->
+            <!-- Tarjeta Lateral Modo Estudio: Acceso Destacado al Arcade -->
             <div id="setup-arcade-promo-card" onclick="document.querySelector('[data-tab-target=arcade]').click()" class="hidden bto-card rounded-3xl bg-gradient-to-br from-slate-900 via-slate-900 to-rose-950 text-white p-6 cursor-pointer hover:border-rose-500/50 transition-all group">
               <div class="flex items-center justify-between">
                 <span class="font-mono text-xs uppercase tracking-wider px-2.5 py-1 rounded-md bg-rose-500/20 text-rose-300 border border-rose-500/30 font-semibold">Entrenamiento Visual</span>
@@ -701,70 +707,80 @@
 
       </div>
 
-      <!-- SCREEN 1B: Examen / Tutor Activo -->
+      <!-- SCREEN 1B: Examen / Tutor Activo (VISUALMENTE LIMPIO Y SIN SATURACIÓN) -->
       <div id="exam-active-screen" class="hidden">
         
         <!-- Banner de Modo Auditoría -->
-        <div id="exam-review-banner" class="hidden mb-5 p-4 sm:p-5 rounded-2xl bg-amber-500/15 border border-amber-500/40 flex flex-wrap items-center justify-between gap-4">
-          <div class="flex items-center gap-3 text-amber-900 dark:text-amber-200 font-semibold text-base">
+        <div id="exam-review-banner" class="hidden mb-4 p-4 rounded-2xl bg-amber-500/15 border border-amber-500/40 flex flex-wrap items-center justify-between gap-3">
+          <div class="flex items-center gap-2.5 text-amber-900 dark:text-amber-200 font-semibold text-sm sm:text-base">
             <svg class="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <span>Modo Auditoría Post-Examen: Revisando claves oficiales y justificaciones clínicas.</span>
+            <span>Modo Auditoría Post-Examen: Revisando claves oficiales y justificaciones.</span>
           </div>
-          <div class="flex items-center gap-2.5">
-            <button id="btn-review-filter-all" class="px-4 py-2 rounded-xl text-sm font-semibold bg-amber-500 text-slate-950">Todas</button>
-            <button id="btn-review-filter-wrong" class="px-4 py-2 rounded-xl text-sm font-semibold bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-200 hover:bg-rose-500 hover:text-white transition-colors">Solo Falladas</button>
-            <button id="btn-review-exit" class="px-4 py-2 rounded-xl text-sm font-semibold bg-slate-900 text-white dark:bg-white dark:text-slate-900">Volver al Informe</button>
+          <div class="flex items-center gap-2">
+            <button id="btn-review-filter-all" class="px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-semibold bg-amber-500 text-slate-950">Todas</button>
+            <button id="btn-review-filter-wrong" class="px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-semibold bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-200 hover:bg-rose-500 hover:text-white transition-colors">Solo Falladas</button>
+            <button id="btn-review-banner-pdf" type="button" class="px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-bold bg-emerald-500 text-slate-950 hover:bg-emerald-400 transition-colors">Descargar PDF</button>
+            <button id="btn-review-exit" class="px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-semibold bg-slate-900 text-white dark:bg-white dark:text-slate-900">Volver al Informe</button>
           </div>
         </div>
 
-        <!-- Barra de Telemetría del Examen -->
-        <div class="bto-card flex flex-wrap items-center justify-between gap-4 mb-5 p-4 sm:p-5 rounded-2xl bg-white dark:bg-bto-panel">
-          <div class="flex flex-wrap items-center gap-3">
-            <span id="exam-mode-badge" class="px-3 py-1 rounded-lg bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 font-mono text-xs sm:text-sm font-bold uppercase">Simulacro</span>
-            <span id="exam-progress-text" class="font-mono font-bold text-base sm:text-lg text-slate-900 dark:text-white">ÍTEM 1 / 100</span>
-            <span id="q-specialty-badge" class="px-3 py-1 rounded-lg bg-sky-500/10 text-sky-700 dark:text-sky-300 border border-sky-500/25 text-xs sm:text-sm font-semibold">Medicina Interna</span>
-            <span id="q-subtema-badge" class="text-sm font-medium text-slate-500 dark:text-slate-400 hidden md:inline"></span>
+        <!-- Barra de Telemetría Limpia y Compacta -->
+        <div class="bto-card flex items-center justify-between gap-2 mb-3 p-3 sm:p-4 rounded-2xl bg-white dark:bg-bto-panel">
+          <div class="flex items-center gap-2 sm:gap-3 min-w-0">
+            <span id="exam-mode-badge" class="px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 font-mono text-[11px] sm:text-xs font-bold uppercase shrink-0">Simulacro</span>
+            <span id="exam-progress-text" class="font-mono font-bold text-sm sm:text-base text-slate-900 dark:text-white truncate">ÍTEM 1 / 100</span>
           </div>
 
-          <div class="flex flex-wrap items-center gap-3">
-            <div class="flex items-center gap-2 px-4 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-              <span class="text-xs font-mono text-slate-500 uppercase">TIEMPO:</span>
-              <span id="exam-timer" class="font-mono font-bold text-lg sm:text-xl text-slate-900 dark:text-emerald-400">03:00:00</span>
-            </div>
-
-            <button id="btn-open-ai-tutor-top" type="button" class="bto-btn px-4 py-2 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 text-sky-700 dark:text-sky-300 border border-sky-500/30 font-semibold text-sm flex items-center gap-2" title="Consultar al Tutor Clínico IA">
-              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" y1="16" x2="8" y2="16"/><line x1="16" y1="16" x2="16" y2="16"/></svg>
-              <span class="hidden sm:inline">Interconsulta IA</span>
+          <div class="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+            <!-- Botón Celular: Abre el Cajón Derecho con Cronómetro, Clasificación y Mapa -->
+            <button id="btn-open-right-exam-drawer" type="button" class="lg:hidden bto-btn px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center gap-1.5 text-slate-900 dark:text-emerald-400 font-mono text-xs font-bold" title="Ver Cronómetro y Mapa de Preguntas">
+              <svg class="w-4 h-4 text-emerald-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              <span id="mobile-exam-timer">03:00:00</span>
+              <span class="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 text-[10px]">Mapa</span>
             </button>
 
-            <button id="btn-mark-q" class="bto-btn px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-900 text-sm font-semibold flex items-center gap-1.5">
-              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>
-              <span class="hidden sm:inline">Marcar Duda</span>
+            <!-- Botón PC: Colapsar/Mostrar Panel Lateral Derecho para cero distracciones -->
+            <button id="btn-toggle-pc-sidebar" type="button" class="hidden lg:flex bto-btn px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-900 text-xs font-mono font-semibold items-center gap-1.5 text-slate-700 dark:text-slate-300" title="Mostrar/Ocultar Panel de Cronómetro y Mapa">
+              <svg class="w-4 h-4 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
+              <span id="pc-sidebar-toggle-label">Ocultar Mapa</span>
             </button>
 
-            <button id="btn-finish-exam" class="bto-btn px-4 py-2 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-sm font-bold border-transparent">
-              Finalizar Guardia
+            <button id="btn-open-ai-tutor-top" type="button" class="bto-btn px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 text-sky-700 dark:text-sky-300 border border-sky-500/30 font-semibold text-xs sm:text-sm flex items-center gap-1.5" title="Consultar al Tutor Clínico IA">
+              <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" y1="16" x2="8" y2="16"/><line x1="16" y1="16" x2="16" y2="16"/></svg>
+              <span class="hidden sm:inline">IA</span>
+            </button>
+
+            <button id="btn-mark-q" type="button" class="bto-btn px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-slate-100 dark:bg-slate-900 text-xs sm:text-sm font-semibold flex items-center gap-1.5" title="Marcar pregunta en duda">
+              <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>
+              <span class="hidden md:inline">Duda</span>
+            </button>
+
+            <button id="btn-finish-exam" type="button" class="bto-btn px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-xs sm:text-sm font-bold border-transparent">
+              Terminar Intento
             </button>
           </div>
         </div>
 
         <!-- Barra de Progreso -->
-        <div class="w-full bg-slate-200 dark:bg-slate-800/90 h-2.5 rounded-full mb-6 overflow-hidden">
+        <div class="w-full bg-slate-200 dark:bg-slate-800/90 h-2 rounded-full mb-5 overflow-hidden">
           <div id="exam-progress-bar" class="bg-gradient-to-r from-emerald-500 to-cyan-500 h-full transition-all duration-300" style="width: 1%"></div>
         </div>
 
-        <!-- Layout de 2 Columnas -->
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <!-- Backdrop para el Cajón Derecho en Celular -->
+        <div id="right-exam-drawer-backdrop" class="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm hidden lg:hidden"></div>
+
+        <!-- Layout Principal del Examen -->
+        <div id="exam-workspace-grid" class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           
-          <!-- Columna 1: Caso Clínico, Opciones y Justificación (9 cols) -->
-          <div class="lg:col-span-9 space-y-6">
+          <!-- Columna 1: Caso Clínico, Opciones y Justificación (9 cols en PC o 12 cuando se colapsa el panel) -->
+          <div id="exam-main-col" class="lg:col-span-9 space-y-6 transition-all duration-200">
             <div class="bto-card p-4 sm:p-8 rounded-3xl bg-white dark:bg-bto-panel space-y-5">
               
               <!-- Enunciado del Caso Clínico -->
               <div class="space-y-3">
-                <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 pb-3">
-                  <span class="font-mono text-xs sm:text-sm font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Presentación del Caso Clínico</span>
-                  <span class="font-mono text-xs text-slate-400">PROTOCOLO EHEP-MSP</span>
+                <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 pb-2.5">
+                  <span class="font-mono text-xs sm:text-sm font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Caso Clínico</span>
+                  <span class="font-mono text-[11px] text-slate-400">EHEP-MSP</span>
                 </div>
                 <div id="q-enunciado" class="clinical-prose text-sm sm:text-base text-slate-800 dark:text-slate-100 font-normal">
                   Cargando caso clínico...
@@ -806,6 +822,15 @@
                   </div>
                 </div>
 
+                <!-- Auditoría Focalizada del Distractor Seleccionado -->
+                <div id="q-distractors-container" class="hidden space-y-3 pb-3 border-b border-slate-200 dark:border-slate-800">
+                  <span id="q-distractors-title" class="font-mono text-xs sm:text-sm font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 flex items-center gap-2">
+                    <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                    <span>Por qué tu opción seleccionada es incorrecta:</span>
+                  </span>
+                  <div id="q-distractors-list" class="grid grid-cols-1 gap-3 pt-1"></div>
+                </div>
+
                 <!-- Perla Clínica CACES -->
                 <div id="q-perla-box" class="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-1.5">
                   <div class="flex items-center gap-2 font-mono text-xs font-bold uppercase text-amber-700 dark:text-amber-300">
@@ -829,68 +854,100 @@
                     <div id="q-justification-text" class="clinical-prose text-sm text-slate-700 dark:text-slate-300"></div>
                   </div>
                 </div>
-
-                <!-- Auditoría Focalizada del Distractor Seleccionado -->
-                <div id="q-distractors-container" class="hidden space-y-3 pt-4 border-t border-slate-200 dark:border-slate-800">
-                  <span id="q-distractors-title" class="font-mono text-xs sm:text-sm font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 flex items-center gap-2">
-                    <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
-                    <span>Por qué tu opción seleccionada es incorrecta:</span>
-                  </span>
-                  <div id="q-distractors-list" class="grid grid-cols-1 gap-3 pt-1"></div>
-                </div>
               </div>
 
               <!-- Pie de Navegación entre Preguntas -->
               <div class="flex items-center justify-between pt-5 border-t border-slate-200 dark:border-slate-800">
-                <button id="btn-prev-q" class="bto-btn px-6 py-3 rounded-xl bg-slate-100 dark:bg-slate-900 text-base font-bold">
+                <button id="btn-prev-q" class="bto-btn px-5 sm:px-6 py-3 rounded-xl bg-slate-100 dark:bg-slate-900 text-sm sm:text-base font-bold">
                   ← Anterior
                 </button>
-                <div class="font-mono text-xs sm:text-sm text-slate-400 hidden md:block">
+                <div class="font-mono text-xs text-slate-400 hidden md:block">
                   Atajos: <kbd class="px-2 py-1 rounded bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200">A-D</kbd> responder • <kbd class="px-2 py-1 rounded bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200">←/→</kbd> navegar
                 </div>
-                <button id="btn-next-q" class="bto-btn px-7 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 text-base font-bold border-transparent">
+                <button id="btn-next-q" class="bto-btn px-6 sm:px-7 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 text-sm sm:text-base font-bold border-transparent">
                   Siguiente →
                 </button>
               </div>
             </div>
           </div>
 
-          <!-- Columna 2: Mapa de Guardia (3 cols) -->
-          <div class="lg:col-span-3">
-            <div class="bto-card p-4 rounded-3xl bg-white dark:bg-bto-panel sticky top-28 sm:top-32 space-y-4">
-              <div class="flex items-center justify-between">
-                <h3 class="font-display text-base font-bold text-slate-900 dark:text-white">Mapa de Reactivos</h3>
-                <span id="matrix-answered-count" class="font-mono text-sm font-bold text-emerald-600 dark:text-emerald-400">0/100</span>
-              </div>
+          <!-- Columna 2 / Drawer Derecho en Móvil: Cronómetro + Clasificación (Solo Tutor) + Mapa de Preguntas -->
+          <aside id="exam-sidebar-col" class="fixed inset-y-0 right-0 z-50 w-80 max-w-[85vw] bg-white dark:bg-bto-panel p-5 shadow-2xl transform translate-x-full transition-transform duration-300 ease-out overflow-y-auto lg:static lg:z-auto lg:w-auto lg:max-w-none lg:bg-transparent lg:dark:bg-transparent lg:p-0 lg:shadow-none lg:translate-x-0 lg:overflow-visible lg:col-span-3">
+            <div class="bto-card lg:p-5 rounded-3xl bg-white dark:bg-bto-panel lg:sticky lg:top-24 space-y-4 border-0 lg:border">
               
-              <div class="grid grid-cols-2 gap-2.5 text-xs font-mono text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800 pb-4">
-                <div class="flex items-center gap-2"><span class="w-3.5 h-3.5 rounded bg-emerald-500"></span> Actual</div>
-                <div class="flex items-center gap-2"><span class="w-3.5 h-3.5 rounded bg-emerald-500/30 border border-emerald-500/50"></span> Respondida</div>
-                <div class="flex items-center gap-2"><span class="w-3.5 h-3.5 rounded bg-amber-400"></span> En Duda</div>
-                <div class="flex items-center gap-2"><span class="w-3.5 h-3.5 rounded bg-slate-200 dark:bg-slate-800"></span> Pendiente</div>
+              <!-- Cabecera Móvil del Drawer Derecho -->
+              <div class="flex lg:hidden items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+                <span class="font-display font-bold text-base text-slate-900 dark:text-white">Control de Guardia</span>
+                <button id="btn-close-right-exam-drawer" type="button" class="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 flex items-center justify-center font-bold">✕</button>
               </div>
 
-              <div id="exam-matrix-grid" class="grid grid-cols-5 gap-2 max-h-96 overflow-y-auto pr-1 font-mono"></div>
+              <!-- 1. Cronómetro Oficial Integrado en el mismo apartado del Mapa -->
+              <div class="p-3.5 rounded-2xl bg-slate-100/90 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <svg class="w-4 h-4 text-emerald-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  <span class="font-mono text-xs font-bold uppercase text-slate-500 dark:text-slate-400">Tiempo:</span>
+                </div>
+                <span id="exam-timer" class="font-mono font-black text-lg sm:text-xl text-slate-900 dark:text-emerald-400">03:00:00</span>
+              </div>
 
-              <div class="pt-2">
-                <button id="btn-jump-unanswered" class="bto-btn w-full py-2.5 px-4 rounded-xl bg-slate-100 dark:bg-slate-900 font-sans text-sm font-semibold">
-                  Ir a primera sin responder
+              <!-- 2. Clasificación de la Pregunta (Oculta en Simulador, Visible y Colapsable en Modo Tutor) -->
+              <div id="unified-classification-section" class="hidden rounded-2xl bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 overflow-hidden">
+                <button type="button" id="btn-collapse-classification" class="w-full px-3.5 py-2.5 flex items-center justify-between text-left font-mono text-xs font-bold uppercase text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors">
+                  <span>Clasificación Clínica</span>
+                  <span id="classification-collapse-icon" class="text-sm font-bold">−</span>
                 </button>
+                <div id="unified-classification-body" class="px-3.5 pb-3.5 pt-1 space-y-1.5 border-t border-slate-200/60 dark:border-slate-800/60">
+                  <span id="q-specialty-badge" class="inline-block px-2.5 py-1 rounded-lg bg-sky-500/15 text-sky-700 dark:text-sky-300 border border-sky-500/25 text-xs font-mono font-bold">Medicina Interna</span>
+                  <div id="q-subtema-badge" class="text-xs font-medium text-slate-600 dark:text-slate-300 leading-snug block"></div>
+                </div>
               </div>
+
+              <!-- 3. Mapa de Preguntas (Con opción de colapsar) -->
+              <div class="space-y-3 pt-1">
+                <div class="flex items-center justify-between">
+                  <button type="button" id="btn-collapse-map-section" class="flex items-center gap-1.5 font-display text-sm sm:text-base font-bold text-slate-900 dark:text-white hover:text-emerald-500 transition-colors">
+                    <span>Mapa de Preguntas</span>
+                    <span id="map-collapse-icon" class="font-mono text-xs text-slate-400">[−]</span>
+                  </button>
+                  <span id="matrix-answered-count" class="font-mono text-xs sm:text-sm font-bold text-emerald-600 dark:text-emerald-400">0/100</span>
+                </div>
+
+                <div id="unified-map-body" class="space-y-3">
+                  <div class="grid grid-cols-2 gap-2 text-[11px] font-mono text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800 pb-3">
+                    <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-emerald-500"></span> Actual</div>
+                    <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-emerald-500/30 border border-emerald-500/50"></span> Respondida</div>
+                    <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-amber-400"></span> En Duda</div>
+                    <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-slate-200 dark:bg-slate-800"></span> Pendiente</div>
+                  </div>
+
+                  <div id="exam-matrix-grid" class="grid grid-cols-5 gap-2 max-h-80 overflow-y-auto pr-1 font-mono"></div>
+
+                  <div class="pt-1 space-y-2">
+                    <button id="btn-jump-unanswered" type="button" class="bto-btn w-full py-2.5 px-3 rounded-xl bg-slate-100 dark:bg-slate-900 font-sans text-xs sm:text-sm font-semibold">
+                      Ir a primera sin responder
+                    </button>
+                    <button id="btn-sidebar-finish-exam" type="button" class="bto-btn w-full py-2.5 px-3 rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-sans text-xs sm:text-sm font-bold border-transparent">
+                      Terminar Intento y Revisar
+                    </button>
+                  </div>
+                </div>
+              </div>
+
             </div>
-          </div>
+          </aside>
+
         </div>
       </div>
 
-      <!-- SCREEN 1C: Informe de Resultados -->
-      <div id="exam-results-screen" class="hidden max-w-4xl mx-auto py-6">
-        <div class="bto-card bg-white dark:bg-bto-panel rounded-3xl p-8 sm:p-12 space-y-8">
+      <!-- SCREEN 1C: Informe de Resultados + Revisión Completa de Preguntas + Descarga PDF -->
+      <div id="exam-results-screen" class="hidden max-w-5xl mx-auto py-4 space-y-6">
+        <div class="bto-card bg-white dark:bg-bto-panel rounded-3xl p-6 sm:p-10 space-y-8">
           
           <div class="text-center space-y-4">
-            <span id="res-status-badge" class="inline-block px-5 py-2 rounded-full font-mono text-sm font-bold uppercase bg-emerald-500/15 text-emerald-400">
+            <span id="res-status-badge" class="inline-block px-5 py-2 rounded-full font-mono text-xs sm:text-sm font-bold uppercase bg-emerald-500/15 text-emerald-400">
               Veredicto Oficial EHEP
             </span>
-            <h2 class="font-display text-3xl sm:text-4xl font-extrabold tracking-tight">Informe Final de Guardia</h2>
+            <h2 class="font-display text-2xl sm:text-4xl font-extrabold tracking-tight">Informe Final de Resultados</h2>
             <div class="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-6 py-2">
               <div class="font-mono text-5xl sm:text-6xl font-black text-emerald-500" id="res-percentage">
                 0%
@@ -901,7 +958,7 @@
                 <span id="res-caces-points" class="font-mono text-2xl sm:text-3xl font-black text-amber-500 dark:text-amber-400">0 / 1000 PTS</span>
               </div>
             </div>
-            <p class="font-mono text-sm sm:text-base text-slate-500 dark:text-slate-400">
+            <p class="font-mono text-xs sm:text-base text-slate-500 dark:text-slate-400">
               Aciertos: <span id="res-score" class="font-bold text-slate-900 dark:text-white">0 / 0</span> • Tiempo invertido: <span id="res-time-spent" class="font-bold text-slate-900 dark:text-white">0 min</span>
             </p>
           </div>
@@ -911,17 +968,43 @@
             <div id="res-specialties-container" class="space-y-3"></div>
           </div>
 
-          <div class="flex flex-col sm:flex-row items-center gap-4 pt-6 border-t border-slate-200 dark:border-slate-800">
-            <button id="btn-review-exam" class="bto-btn w-full sm:flex-1 py-4 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-sm sm:text-base flex items-center justify-center gap-2 border-transparent">
-              <span>Auditar Respuestas y Claves</span>
+          <!-- Botones de Acción y Descarga PDF -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-6 border-t border-slate-200 dark:border-slate-800">
+            <button id="btn-download-review-pdf" type="button" class="bto-btn py-3.5 px-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-bold text-sm flex items-center justify-center gap-2 border-transparent shadow-md shadow-emerald-500/20">
+              <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              <span>Descargar PDF de Revisión</span>
             </button>
-            <button id="btn-restart-exam" class="bto-btn w-full sm:flex-1 py-4 rounded-2xl bg-slate-100 dark:bg-slate-900 font-bold text-sm sm:text-base">
-              Nueva Sesión
+            <button id="btn-review-exam" type="button" class="bto-btn py-3.5 px-4 rounded-2xl bg-sky-500/15 hover:bg-sky-500/25 text-sky-700 dark:text-sky-300 border border-sky-500/30 font-bold text-sm flex items-center justify-center gap-2">
+              <span>Revisión Interactiva 1 a 1</span>
             </button>
-            <button id="btn-results-go-morgue" class="bto-btn w-full sm:flex-1 py-4 rounded-2xl bg-rose-500 hover:bg-rose-600 text-white font-bold text-sm sm:text-base border-transparent">
-              Repasar Errores en Modo Estudio
+            <button id="btn-results-go-morgue" type="button" class="bto-btn py-3.5 px-4 rounded-2xl bg-rose-500 hover:bg-rose-600 text-white font-bold text-sm border-transparent">
+              Ir a La Morgue
+            </button>
+            <button id="btn-restart-exam" type="button" class="bto-btn py-3.5 px-4 rounded-2xl bg-slate-100 dark:bg-slate-900 font-bold text-sm">
+              Salir
             </button>
           </div>
+        </div>
+
+        <!-- SECCIÓN DE REVISIÓN COMPLETA DEL EXAMEN (VISIBLE AL FINALIZAR SIMULADOR O MODO TUTOR) -->
+        <div id="res-full-review-section" class="bto-card bg-white dark:bg-bto-panel rounded-3xl p-6 sm:p-8 space-y-6">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
+            <div>
+              <h3 class="font-display text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white">Revisión Detallada de Preguntas</h3>
+              <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400">Desglose pregunta por pregunta con respuestas correctas, análisis de fallos y Perlas CACES.</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <button type="button" id="btn-res-filter-all" class="px-3.5 py-1.5 rounded-xl font-mono text-xs font-bold bg-emerald-500 text-slate-950">Todas</button>
+              <button type="button" id="btn-res-filter-wrong" class="px-3.5 py-1.5 rounded-xl font-mono text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">Incorrectas / Sin responder</button>
+              <button type="button" id="btn-res-filter-correct" class="px-3.5 py-1.5 rounded-xl font-mono text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">Correctas</button>
+              <button type="button" id="btn-download-review-pdf-secondary" class="px-3.5 py-1.5 rounded-xl font-mono text-xs font-bold bg-gradient-to-r from-emerald-500 to-teal-600 text-white flex items-center gap-1.5 shadow-sm">
+                <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                <span>Descargar PDF</span>
+              </button>
+            </div>
+          </div>
+
+          <div id="res-detailed-review-list" class="space-y-5"></div>
         </div>
       </div>
 
@@ -1049,8 +1132,8 @@
               Consulta al instante cualquier fármaco, protocolo, escala o patología del banco oficial con fundamentación fisiopatológica y Guías del MSP.
             </p>
             <div class="pt-2 flex flex-wrap items-center gap-3 text-xs sm:text-sm font-mono">
-              <span id="exp-stat-total" class="px-3.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 font-bold text-cyan-400">Reactivos</span>
-              <span id="exp-stat-filtered" class="px-3.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 font-bold text-emerald-400">Mostrando todos</span>
+              <span id="exp-stat-total" class="px-3.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 font-bold text-cyan-400">Preguntas</span>
+              <span id="exp-stat-filtered" class="px-3.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 font-bold text-emerald-400">Mostrando todas</span>
               <button id="btn-export-study-pdf" class="bto-btn ml-auto px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-sans font-bold flex items-center gap-2 border-transparent">
                 <span>Exportar Cuaderno PDF</span>
               </button>
@@ -1212,7 +1295,7 @@
               <h2 class="font-display text-2xl font-bold">La Morgue (Auditoría de Errores)</h2>
               <span id="badge-error-count" class="px-3 py-1 rounded-lg bg-rose-500 text-white font-mono text-xs sm:text-sm font-bold">0 pendientes</span>
             </div>
-            <p class="text-sm sm:text-base text-slate-500 dark:text-slate-400">Cada reactivo que fallas ingresa aquí. Debes acertarlo 2 veces seguidas para dar de alta el tema.</p>
+            <p class="text-sm sm:text-base text-slate-500 dark:text-slate-400">Cada pregunta que fallas ingresa aquí con todas sus opciones, la respuesta errónea elegida, por qué no es correcta y su Perla CACES.</p>
           </div>
           <div class="flex items-center gap-3">
             <button id="btn-study-errors" class="bto-btn px-6 py-3 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-sm sm:text-base font-bold whitespace-nowrap border-transparent">
@@ -1224,7 +1307,7 @@
           </div>
         </div>
 
-        <div id="errors-list-container" class="space-y-4"></div>
+        <div id="errors-list-container" class="space-y-5"></div>
       </div>
     </section>
 
@@ -1458,7 +1541,7 @@
         
         <div class="grid grid-cols-2 lg:grid-cols-4 gap-5">
           <div class="bto-card p-6 rounded-3xl bg-white dark:bg-bto-panel">
-            <span class="font-mono text-xs sm:text-sm font-bold text-slate-500 uppercase block mb-2">Reactivos Resueltos</span>
+            <span class="font-mono text-xs sm:text-sm font-bold text-slate-500 uppercase block mb-2">Preguntas Resueltas</span>
             <div id="kpi-answered" class="font-mono text-3xl font-black">0</div>
           </div>
           <div class="bto-card p-6 rounded-3xl bg-white dark:bg-bto-panel">
@@ -1521,7 +1604,7 @@
             <div>
               <span class="font-mono text-xs text-rose-400 uppercase font-bold">Panel Exclusivo de Administrador</span>
               <h2 class="font-display text-xl font-bold">Extractor de Bancos (Consola JS)</h2>
-              <p class="text-sm text-slate-400">Copia el script para capturar reactivos estructurados en formato JSON limpio.</p>
+              <p class="text-sm text-slate-400">Copia el script para capturar preguntas estructuradas en formato JSON limpio.</p>
             </div>
             <button id="btn-copy-extractor-script" class="bto-btn px-5 py-2.5 rounded-xl bg-emerald-500 text-slate-950 font-mono font-bold text-sm border-transparent">
               Copiar Script
@@ -1560,7 +1643,7 @@
 
         <div id="pdf-preview-container" class="hidden bto-card p-7 sm:p-8 rounded-3xl bg-white dark:bg-bto-panel space-y-5">
           <div class="flex items-center justify-between">
-            <h3 class="font-display font-bold text-lg">Vista Previa de Reactivos</h3>
+            <h3 class="font-display font-bold text-lg">Vista Previa de Preguntas</h3>
             <span id="pdf-detected-count" class="px-3.5 py-1 rounded-full bg-emerald-500 text-slate-950 font-mono text-sm font-bold">0 detectadas</span>
           </div>
           <div id="pdf-preview-list" class="space-y-3 max-h-96 overflow-y-auto pr-2"></div>
@@ -1648,7 +1731,7 @@
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 font-mono text-xs">
           <div class="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-center">
             <b class="text-emerald-500 text-sm block">+10 XP</b>
-            <span class="text-slate-600 dark:text-slate-300">Acierto en Guardia</span>
+            <span class="text-slate-600 dark:text-slate-300">1er Clic Correcto</span>
           </div>
           <div class="p-3 rounded-xl bg-sky-500/10 border border-sky-500/20 text-center">
             <b class="text-sky-500 text-sm block">+15 XP</b>
@@ -1696,7 +1779,6 @@
             </p>
           </div>
 
-          <!-- Botón Destacado: Continuar con Google -->
           <button id="btn-login-google" type="button" class="w-full py-3.5 px-4 rounded-2xl bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-800 dark:text-white border-2 border-slate-300 dark:border-slate-700 hover:border-emerald-500 font-sans font-bold text-base flex items-center justify-center gap-3 transition-all shadow-sm hover:shadow-md cursor-pointer group">
             <svg class="w-5 h-5 shrink-0" viewBox="0 0 24 24">
               <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -1709,13 +1791,11 @@
 
           <div id="google-one-tap-container" class="w-full flex justify-center"></div>
 
-          <!-- Divisor -->
           <div class="relative flex items-center justify-center my-2">
             <div class="border-t border-slate-200 dark:border-slate-800 w-full"></div>
             <span class="bg-white dark:bg-bto-panel px-3 text-[11px] font-mono uppercase text-slate-400 shrink-0">o con Credencial Manual</span>
           </div>
 
-          <!-- Formulario Manual Alternativo -->
           <details class="group text-xs">
             <summary class="font-mono text-xs font-semibold text-slate-500 hover:text-emerald-500 cursor-pointer text-center list-none py-1">
               › Ingresar con Correo y PIN alternativo
@@ -1747,7 +1827,7 @@
             <div class="flex items-center gap-3">
               <div id="auth-active-avatar-wrap" class="w-12 h-12 rounded-full overflow-hidden bg-emerald-500 text-slate-950 flex items-center justify-center font-bold text-lg shrink-0">
                 <img id="auth-active-avatar-img" src="" alt="Google Avatar" class="w-full h-full object-cover hidden">
-                <span id="auth-active-avatar-initial">🩺</span>
+                <span id="auth-active-avatar-initial">DR</span>
               </div>
               <div class="min-w-0 flex-1">
                 <div class="flex items-center gap-2">

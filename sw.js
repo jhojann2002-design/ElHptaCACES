@@ -1,4 +1,4 @@
-const CACHE_NAME = 'caces-medprep-v2';
+const CACHE_NAME = 'caces-medprep-v4';
 const CORE_ASSETS = [
   './',
   './index.html',
