@@ -6,6 +6,8 @@ export class ExamEngine {
     this.sessionQuestions = [];
     this.currentIndex = 0;
     this.userAnswers = {}; // { [questionId]: optionId }
+    this.firstAttemptByQuestion = {}; // { [questionId]: optionId } -> Bloquea farmeo de XP en modo tutor
+    this.xpRewardedQuestions = {}; // { [questionId]: boolean }
     this.markedQuestions = new Set();
     this.mode = 'study'; // 'caces' | 'study' | 'errors' | 'bookmarks'
     this.timeRemaining = 0; // en segundos
@@ -15,16 +17,196 @@ export class ExamEngine {
     this.isReviewing = false;
     this.reviewFilter = 'all'; // 'all' | 'wrong' | 'marked'
     this.lastSummary = null;
+    this.currentSubtema = null;
+    this.modeSnapshots = {
+      simulacro: null,
+      estudio: null
+    };
 
     // Callbacks de interfaz
     this.onTick = null;
     this.onStateChange = null;
     this.onFinish = null;
+
+    // Guardar estado antes de recargar o cerrar pestaña
+    window.addEventListener('beforeunload', () => {
+      if (this.sessionQuestions.length > 0) {
+        this.persistSessionState();
+      }
+    });
+  }
+
+  getSlotForMode(mode = this.mode) {
+    return mode === 'caces' ? 'simulacro' : 'estudio';
   }
 
   async loadQuestions() {
     this.allQuestions = await Storage.getAllQuestions();
     return this.allQuestions;
+  }
+
+  createSnapshot() {
+    if (!this.sessionQuestions || this.sessionQuestions.length === 0) {
+      return null;
+    }
+    return {
+      mode: this.mode,
+      sessionQuestions: [...this.sessionQuestions],
+      currentIndex: this.currentIndex,
+      userAnswers: { ...this.userAnswers },
+      firstAttemptByQuestion: { ...this.firstAttemptByQuestion },
+      xpRewardedQuestions: { ...this.xpRewardedQuestions },
+      markedQuestions: Array.from(this.markedQuestions),
+      timeRemaining: this.timeRemaining,
+      timeElapsed: this.timeElapsed,
+      currentSubtema: this.currentSubtema,
+      isFinished: this.isFinished,
+      isReviewing: this.isReviewing,
+      reviewFilter: this.reviewFilter,
+      lastSummary: this.lastSummary
+    };
+  }
+
+  /**
+   * Guarda en localStorage el estado exacto del examen y del cronómetro
+   * en la ranura correspondiente ('simulacro' o 'estudio').
+   */
+  persistSessionState() {
+    const slot = this.getSlotForMode(this.mode);
+    if (!this.sessionQuestions || this.sessionQuestions.length === 0) {
+      this.modeSnapshots[slot] = null;
+      Storage.clearActiveSession(slot);
+      return;
+    }
+
+    const snap = this.createSnapshot();
+    this.modeSnapshots[slot] = snap;
+
+    if (this.isFinished && !this.lastSummary) {
+      return;
+    }
+
+    Storage.saveActiveSession(snap, slot);
+  }
+
+  /**
+   * Aplica un snapshot guardado al motor y devuelve el estado de pantalla:
+   * 'reviewing' | 'finished' | true (en curso) | false (sin sesión)
+   */
+  applySnapshot(saved) {
+    if (!saved || !Array.isArray(saved.sessionQuestions) || saved.sessionQuestions.length === 0) {
+      return false;
+    }
+
+    this.stopTimer();
+    this.mode = saved.mode || 'caces';
+    this.sessionQuestions = saved.sessionQuestions;
+    this.currentIndex = Math.min(saved.currentIndex || 0, this.sessionQuestions.length - 1);
+    this.userAnswers = saved.userAnswers || {};
+    this.firstAttemptByQuestion = saved.firstAttemptByQuestion || {};
+    this.xpRewardedQuestions = saved.xpRewardedQuestions || {};
+    this.markedQuestions = new Set(Array.isArray(saved.markedQuestions) ? saved.markedQuestions : []);
+    this.timeRemaining = typeof saved.timeRemaining === 'number' ? saved.timeRemaining : (this.sessionQuestions.length * 108);
+    this.timeElapsed = typeof saved.timeElapsed === 'number' ? saved.timeElapsed : 0;
+    this.currentSubtema = saved.currentSubtema || null;
+    this.reviewFilter = saved.reviewFilter || 'all';
+    this.lastSummary = saved.lastSummary || null;
+
+    const slot = this.getSlotForMode(this.mode);
+    this.modeSnapshots[slot] = saved;
+
+    if (saved.isFinished && saved.lastSummary) {
+      this.isFinished = true;
+      this.isReviewing = Boolean(saved.isReviewing);
+      if (this.isReviewing) {
+        this.notifyState();
+        return 'reviewing';
+      }
+      return 'finished';
+    }
+
+    this.isFinished = false;
+    this.isReviewing = false;
+
+    this.startTimer();
+    this.notifyState();
+
+    if (typeof this.onTick === 'function') {
+      const timeToDisplay = this.mode === 'caces' && !this.isFinished ? this.timeRemaining : this.timeElapsed;
+      this.onTick({
+        remaining: this.timeRemaining,
+        elapsed: this.timeElapsed,
+        formatted: this.formatTime(timeToDisplay),
+        isUrgent: this.mode === 'caces' && this.timeRemaining < 900
+      });
+    }
+
+    return true;
+  }
+
+  /**
+   * Restaura una sesión en curso (o ya terminada con revisión pendiente)
+   * tras actualizar la página o reabrir el navegador.
+   */
+  restoreActiveSession(explicitSlot = null) {
+    const saved = Storage.getActiveSession(explicitSlot);
+    return this.applySnapshot(saved);
+  }
+
+  /**
+   * Cambia entre el contexto de 'simulacro' y 'estudio' preservando intacto
+   * el progreso, respuestas, cronómetro y revisión de ambos modos.
+   */
+  switchModeContext(targetDialMode) {
+    const targetSlot = targetDialMode === 'estudio' ? 'estudio' : 'simulacro';
+    const currentSlot = this.getSlotForMode(this.mode);
+
+    // 1. Pausar cronómetro y respaldar la sesión actual si existe
+    this.stopTimer();
+    if (this.sessionQuestions && this.sessionQuestions.length > 0) {
+      this.persistSessionState();
+    }
+
+    // 2. Buscar sesión guardada del modo destino (en memoria o localStorage)
+    const savedTarget = this.modeSnapshots[targetSlot] || Storage.getActiveSession(targetSlot);
+    if (savedTarget && Array.isArray(savedTarget.sessionQuestions) && savedTarget.sessionQuestions.length > 0) {
+      localStorage.setItem('caces_last_active_slot', targetSlot);
+      return this.applySnapshot(savedTarget);
+    }
+
+    // 3. Si el modo destino no tiene sesión activa, dejar el motor listo para ese modo sin borrar el otro
+    if (currentSlot !== targetSlot || !this.sessionQuestions.length) {
+      this.mode = targetSlot === 'simulacro' ? 'caces' : 'study';
+      this.sessionQuestions = [];
+      this.currentIndex = 0;
+      this.userAnswers = {};
+      this.firstAttemptByQuestion = {};
+      this.xpRewardedQuestions = {};
+      this.markedQuestions = new Set();
+      this.isFinished = false;
+      this.isReviewing = false;
+      this.lastSummary = null;
+    }
+    localStorage.setItem('caces_last_active_slot', targetSlot);
+    return false;
+  }
+
+  /**
+   * Cancela y limpia únicamente la sesión del modo actual (o el indicado)
+   */
+  abandonSession(explicitSlot = null) {
+    const slot = explicitSlot || this.getSlotForMode(this.mode);
+    this.stopTimer();
+    this.isFinished = true;
+    this.isReviewing = false;
+    this.sessionQuestions = [];
+    this.userAnswers = {};
+    this.firstAttemptByQuestion = {};
+    this.xpRewardedQuestions = {};
+    this.markedQuestions = new Set();
+    this.lastSummary = null;
+    this.modeSnapshots[slot] = null;
+    Storage.clearActiveSession(slot);
   }
 
   /**
@@ -36,6 +218,8 @@ export class ExamEngine {
     this.isReviewing = false;
     this.reviewFilter = 'all';
     this.userAnswers = {};
+    this.firstAttemptByQuestion = {};
+    this.xpRewardedQuestions = {};
     this.markedQuestions = new Set();
     this.currentIndex = 0;
     this.timeElapsed = 0;
@@ -123,8 +307,20 @@ export class ExamEngine {
       this.timeRemaining = 0;
     }
 
+    this.persistSessionState();
     this.startTimer();
     this.notifyState();
+
+    if (typeof this.onTick === 'function') {
+      const timeToDisplay = this.mode === 'caces' ? this.timeRemaining : this.timeElapsed;
+      this.onTick({
+        remaining: this.timeRemaining,
+        elapsed: this.timeElapsed,
+        formatted: this.formatTime(timeToDisplay),
+        isUrgent: false
+      });
+    }
+
     return this.sessionQuestions;
   }
 
@@ -183,8 +379,12 @@ export class ExamEngine {
         if (this.timeRemaining <= 0) {
           this.timeRemaining = 0;
           this.finishExam();
+          return;
         }
       }
+
+      // Persistir el cronómetro en tiempo real para no perder nada al refrescar
+      this.persistSessionState();
 
       if (typeof this.onTick === 'function') {
         const timeToDisplay = this.mode === 'caces' && !this.isFinished ? this.timeRemaining : this.timeElapsed;
@@ -210,19 +410,22 @@ export class ExamEngine {
   }
 
   /**
-   * Retorna el estado actual completo de la sesión (requerido por Tutor IA y UI)
+   * Retorna el estado actual completo de la sesión
    */
   getState() {
     const currentQ = this.getCurrentQuestion();
     const selectedAns = currentQ ? this.userAnswers[currentQ.id] : null;
+    const firstAttemptAns = currentQ ? this.firstAttemptByQuestion[currentQ.id] : null;
 
     return {
       question: currentQ,
       index: this.currentIndex,
       total: this.sessionQuestions.length,
       selectedAnswer: selectedAns,
+      firstAttemptAnswer: firstAttemptAns,
       isMarked: currentQ ? this.markedQuestions.has(currentQ.id) : false,
       userAnswers: this.userAnswers,
+      firstAttemptByQuestion: this.firstAttemptByQuestion,
       markedQuestions: Array.from(this.markedQuestions),
       mode: this.mode,
       isFinished: this.isFinished,
@@ -233,17 +436,52 @@ export class ExamEngine {
     };
   }
 
+  /**
+   * Registra la opción seleccionada y devuelve metadatos de si fue el primer intento
+   * para controlar estrictamente el otorgamiento de XP en Modo Tutor.
+   */
   selectAnswer(optionId) {
-    if ((this.isFinished && !this.isReviewing) || this.isReviewing) return;
+    if ((this.isFinished && !this.isReviewing) || this.isReviewing) {
+      return { isFirstClickOnQuestion: false, isFirstClickCorrect: false, changed: false };
+    }
 
     const currentQ = this.getCurrentQuestion();
-    if (!currentQ) return;
+    if (!currentQ) {
+      return { isFirstClickOnQuestion: false, isFirstClickCorrect: false, changed: false };
+    }
 
+    const prevSelected = this.userAnswers[currentQ.id];
+    const isFirstClickOnQuestion = !Object.prototype.hasOwnProperty.call(this.firstAttemptByQuestion, currentQ.id);
+
+    if (isFirstClickOnQuestion) {
+      this.firstAttemptByQuestion[currentQ.id] = optionId;
+      const isCorrectFirst = optionId === currentQ.correcta;
+      Storage.registerAnswer(currentQ.id, isCorrectFirst, isCorrectFirst ? null : optionId);
+    } else if (this.mode === 'caces' && prevSelected !== optionId) {
+      // En modo simulador cerrado el usuario puede cambiar su respuesta antes de entregar
+      const isCorrectNow = optionId === currentQ.correcta;
+      Storage.registerAnswer(currentQ.id, isCorrectNow, isCorrectNow ? null : optionId);
+    } else if (this.mode !== 'caces') {
+      // En modo tutor / La Morgue: una vez respondida, la pregunta queda bloqueada
+      return { isFirstClickOnQuestion: false, isFirstClickCorrect: false, changed: false };
+    }
+
+    const changed = prevSelected !== optionId;
     this.userAnswers[currentQ.id] = optionId;
-    const isCorrect = optionId === currentQ.correcta;
-    Storage.registerAnswer(currentQ.id, isCorrect);
 
+    const isFirstClickCorrect = isFirstClickOnQuestion && (optionId === currentQ.correcta) && !this.xpRewardedQuestions[currentQ.id];
+    if (isFirstClickOnQuestion) {
+      this.xpRewardedQuestions[currentQ.id] = true;
+    }
+
+    this.persistSessionState();
     this.notifyState();
+
+    return {
+      isFirstClickOnQuestion,
+      isFirstClickCorrect,
+      changed
+    };
   }
 
   toggleCurrentMark() {
@@ -255,12 +493,14 @@ export class ExamEngine {
     } else {
       this.markedQuestions.add(currentQ.id);
     }
+    this.persistSessionState();
     this.notifyState();
   }
 
   goToQuestion(index) {
     if (index >= 0 && index < this.sessionQuestions.length) {
       this.currentIndex = index;
+      this.persistSessionState();
       this.notifyState();
     }
   }
@@ -268,6 +508,7 @@ export class ExamEngine {
   nextQuestion() {
     if (this.currentIndex < this.sessionQuestions.length - 1) {
       this.currentIndex++;
+      this.persistSessionState();
       this.notifyState();
     }
   }
@@ -275,6 +516,7 @@ export class ExamEngine {
   prevQuestion() {
     if (this.currentIndex > 0) {
       this.currentIndex--;
+      this.persistSessionState();
       this.notifyState();
     }
   }
@@ -289,6 +531,7 @@ export class ExamEngine {
   async finishExam() {
     this.stopTimer();
     this.isFinished = true;
+    this.isReviewing = false;
 
     let correct = 0;
     let incorrect = 0;
@@ -303,6 +546,9 @@ export class ExamEngine {
       "Bioética": { total: 0, correct: 0, incorrect: 0, weight: 6 }
     };
 
+    // En modo tutor, evaluar con base en la respuesta final o primer intento registrado
+    const effectiveAnswers = {};
+
     this.sessionQuestions.forEach(q => {
       const spec = q.especialidad || 'Medicina Interna';
       if (!specialtyStats[spec]) {
@@ -310,7 +556,16 @@ export class ExamEngine {
       }
       specialtyStats[spec].total++;
 
-      const selected = this.userAnswers[q.id];
+      // Si en Modo Tutor primero eligió una errónea y luego inspeccionó la correcta,
+      // usamos su primer intento real para una auditoría honesta, o la respuesta actual en simulador
+      const selected = (this.mode !== 'caces' && this.firstAttemptByQuestion[q.id])
+        ? this.firstAttemptByQuestion[q.id]
+        : this.userAnswers[q.id];
+
+      if (selected) {
+        effectiveAnswers[q.id] = selected;
+      }
+
       if (!selected) {
         unanswered++;
         specialtyStats[spec].incorrect++;
@@ -320,13 +575,16 @@ export class ExamEngine {
       } else {
         incorrect++;
         specialtyStats[spec].incorrect++;
+        Storage.registerAnswer(q.id, false, selected);
       }
     });
+
+    this.userAnswers = { ...effectiveAnswers };
 
     const total = this.sessionQuestions.length;
     const percentage = total > 0 ? Math.round((correct / total) * 100) : 0;
     const passed = percentage >= 60;
-    
+
     // Escala Oficial CACES: Aprobación en 700 pts (60%), Techo en 1000 pts (100%)
     const puntajeCaces = total > 0
       ? (percentage < 60
@@ -339,8 +597,16 @@ export class ExamEngine {
       st.pct = st.total > 0 ? Math.round((st.correct / st.total) * 100) : 0;
     });
 
+    let formattedDate = '';
+    try {
+      formattedDate = new Date().toLocaleString('es-EC', { dateStyle: 'long', timeStyle: 'short' });
+    } catch (e) {
+      formattedDate = new Date().toLocaleString('es-EC');
+    }
+
     const summary = {
-      modo: this.mode === 'caces' ? 'Simulacro Oficial CACES' : 'Práctica de Estudio',
+      modo: this.mode === 'caces' ? 'Simulacro Oficial CACES' : (this.mode === 'errors' ? 'Repaso La Morgue' : 'Práctica Modo Tutor'),
+      modeKey: this.mode,
       puntuacion: correct,
       total: total,
       incorrectas: incorrect,
@@ -350,18 +616,29 @@ export class ExamEngine {
       aprobado: passed,
       tiempo: this.timeElapsed,
       desglose: specialtyStats,
-      respuestasUsuario: { ...this.userAnswers }, // Guardado para no repetir preguntas en siguientes sesiones
-      fecha: new Date().toLocaleDateString('es-EC', { dateStyle: 'long', timeStyle: 'short' })
+      respuestasUsuario: effectiveAnswers,
+      preguntasSesion: [...this.sessionQuestions],
+      fecha: formattedDate
     };
 
     this.lastSummary = summary;
-    await Storage.saveExamResult(summary);
 
+    // Persistir el resumen para que la revisión sobreviva a una recarga de página
+    this.persistSessionState();
+
+    // Mostrar el informe y la revisión de inmediato sin bloquear por red
     if (typeof this.onFinish === 'function') {
       this.onFinish(summary);
     }
 
     this.notifyState();
+
+    try {
+      await Storage.saveExamResult(summary);
+    } catch (e) {
+      console.warn("Error guardando resultado del examen:", e);
+    }
+
     return summary;
   }
 

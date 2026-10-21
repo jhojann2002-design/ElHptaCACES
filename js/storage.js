@@ -74,10 +74,13 @@ export function normalizeQuestionOptions(q) {
   };
 }
 
+const ACTIVE_SESSION_STORAGE_KEY = 'caces_active_session_v1';
+
 class StorageManager {
   constructor() {
     this.deviceId = this.getOrCreateDeviceId();
     this.supabaseClient = null;
+    this._syncDebounceTimer = null;
     this.initSupabase();
 
     if (localStorage.getItem('caces_master_db_v4_pro') !== 'true') {
@@ -116,6 +119,119 @@ class StorageManager {
     }
   }
 
+  /**
+   * Programa una sincronización en segundo plano sin bloquear la interfaz
+   */
+  scheduleAutoCloudSync(delayMs = 2500) {
+    try {
+      if (this._syncDebounceTimer) {
+        clearTimeout(this._syncDebounceTimer);
+      }
+      this._syncDebounceTimer = setTimeout(() => {
+        this.syncUserProgressToCloud().catch(err => {
+          console.warn("Auto-sync en segundo plano omitido:", err);
+        });
+      }, delayMs);
+    } catch (e) {
+      console.warn("Error al programar auto-sync:", e);
+    }
+  }
+
+  // =========================================================================
+  // PERSISTENCIA DE SESIÓN ACTIVA INDEPENDIENTE (SIMULADOR vs MODO ESTUDIO)
+  // =========================================================================
+  getSessionKeyForSlot(slot = 'simulacro') {
+    return slot === 'estudio'
+      ? 'caces_active_session_estudio_v1'
+      : 'caces_active_session_simulacro_v1';
+  }
+
+  saveActiveSession(sessionData, explicitSlot = null) {
+    try {
+      if (!sessionData) return;
+      const slot = explicitSlot || (sessionData.mode === 'caces' ? 'simulacro' : 'estudio');
+      const payload = JSON.stringify({
+        ...sessionData,
+        slot,
+        savedAt: Date.now()
+      });
+      localStorage.setItem(this.getSessionKeyForSlot(slot), payload);
+      localStorage.setItem(ACTIVE_SESSION_STORAGE_KEY, payload);
+      localStorage.setItem('caces_last_active_slot', slot);
+    } catch (e) {
+      console.warn("No se pudo guardar la sesión activa:", e);
+    }
+  }
+
+  getActiveSession(explicitSlot = null) {
+    try {
+      if (explicitSlot) {
+        const rawSlot = localStorage.getItem(this.getSessionKeyForSlot(explicitSlot));
+        if (rawSlot) {
+          const parsedSlot = JSON.parse(rawSlot);
+          if (parsedSlot && Array.isArray(parsedSlot.sessionQuestions) && parsedSlot.sessionQuestions.length > 0) {
+            return parsedSlot;
+          }
+        }
+        // Compatibilidad con sesión previa única si coincide con el modo
+        const rawLegacy = localStorage.getItem(ACTIVE_SESSION_STORAGE_KEY);
+        if (rawLegacy) {
+          const parsedLegacy = JSON.parse(rawLegacy);
+          const legacySlot = parsedLegacy?.mode === 'caces' ? 'simulacro' : 'estudio';
+          if (legacySlot === explicitSlot && Array.isArray(parsedLegacy?.sessionQuestions) && parsedLegacy.sessionQuestions.length > 0) {
+            return parsedLegacy;
+          }
+        }
+        return null;
+      }
+
+      const lastSlot = localStorage.getItem('caces_last_active_slot');
+      if (lastSlot) {
+        const byLast = this.getActiveSession(lastSlot);
+        if (byLast) return byLast;
+      }
+
+      const simSession = this.getActiveSession('simulacro');
+      if (simSession) return simSession;
+
+      const estSession = this.getActiveSession('estudio');
+      if (estSession) return estSession;
+
+      const raw = localStorage.getItem(ACTIVE_SESSION_STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || !Array.isArray(parsed.sessionQuestions) || parsed.sessionQuestions.length === 0) {
+        return null;
+      }
+      return parsed;
+    } catch (e) {
+      console.warn("Error leyendo sesión activa:", e);
+      return null;
+    }
+  }
+
+  clearActiveSession(explicitSlot = null) {
+    try {
+      if (explicitSlot === 'simulacro' || explicitSlot === 'estudio') {
+        localStorage.removeItem(this.getSessionKeyForSlot(explicitSlot));
+        const rawLegacy = localStorage.getItem(ACTIVE_SESSION_STORAGE_KEY);
+        if (rawLegacy) {
+          const parsed = JSON.parse(rawLegacy);
+          const legacySlot = parsed?.mode === 'caces' ? 'simulacro' : 'estudio';
+          if (legacySlot === explicitSlot) {
+            localStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
+          }
+        }
+        return;
+      }
+      localStorage.removeItem('caces_active_session_simulacro_v1');
+      localStorage.removeItem('caces_active_session_estudio_v1');
+      localStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
+    } catch (e) {
+      console.warn("Error limpiando sesión activa:", e);
+    }
+  }
+
   // =========================================================================
   // SISTEMA DE PERFIL DE USUARIO Y SINCRONIZACIÓN DE PROGRESO
   // =========================================================================
@@ -131,7 +247,6 @@ class StorageManager {
   async loginOrRegisterUser({ name, email, pin = '0000', avatar = null, provider = 'email' }) {
     const cleanEmail = (email || '').trim().toLowerCase();
     const cleanName = (name || '').trim() || cleanEmail.split('@')[0] || 'Médico EHEP';
-    const cleanPin = (pin || '0000').trim();
 
     if (!cleanEmail || !cleanEmail.includes('@')) {
       throw new Error('Ingresa un correo electrónico válido.');
@@ -148,21 +263,17 @@ class StorageManager {
       updatedAt: new Date().toISOString()
     };
 
-    // Usar el correo como identificador persistente del dispositivo para sincronizar en Supabase
     this.deviceId = `usr_${cleanEmail}`;
     localStorage.setItem('caces_device_id', this.deviceId);
     localStorage.setItem('caces_user_profile', JSON.stringify(profile));
 
-    // Intentar recuperar progreso previo en la nube si existe
     await this.pullUserProgressFromCloud(cleanEmail);
-    // Sincronizar estado actual hacia la nube
     await this.syncUserProgressToCloud();
 
     return profile;
   }
 
   async loginWithGoogle() {
-    // 1. Si Supabase está disponible y en entorno web (http/https), intentar OAuth oficial
     if (this.supabaseClient?.auth?.signInWithOAuth && window.location.protocol.startsWith('http')) {
       try {
         const redirectUrl = window.location.origin + window.location.pathname;
@@ -187,8 +298,6 @@ class StorageManager {
       }
     }
 
-    // 2. Si no hay redirección OAuth activa (ej: entorno local o sin redirect URI configurado),
-    // solicitar la cuenta de Google para sincronización directa e instantánea
     return new Promise((resolve, reject) => {
       const email = prompt("Inicia sesión con tu cuenta de Google:\nIngresa tu correo de Gmail:", "");
       if (email === null) {
@@ -235,8 +344,6 @@ class StorageManager {
     };
 
     try {
-      // Guardamos un registro de sincronización en caces_simulacros con modo '__PROFILE_SYNC__'
-      // para no requerir tablas adicionales en Supabase
       await this.supabaseClient.from('caces_simulacros').insert({
         user_email: profile.email,
         device_id: this.deviceId,
@@ -266,7 +373,6 @@ class StorageManager {
 
       if (error || !data || data.length === 0) return false;
 
-      // 1. Restaurar snapshot de XP, racha y errores más reciente
       const latestSync = data.find(r => r.modo === '__PROFILE_SYNC__' && r.desglose_especialidades);
       if (latestSync && latestSync.desglose_especialidades) {
         const snap = latestSync.desglose_especialidades;
@@ -286,7 +392,6 @@ class StorageManager {
         }
       }
 
-      // 2. Restaurar historial de simulacros reales
       const realExams = data.filter(r => r.modo !== '__PROFILE_SYNC__');
       if (realExams.length > 0 && this.getExamHistory().length === 0) {
         const reconstructed = realExams.map(r => ({
@@ -486,16 +591,35 @@ class StorageManager {
   }
 
   async saveExamResult(result) {
-    result.id = 'sim_' + Date.now();
-    result.fecha = new Date().toISOString();
-    result.deviceId = this.deviceId;
+    const historyEntry = {
+      id: 'sim_' + Date.now(),
+      modo: result.modo,
+      modeKey: result.modeKey,
+      puntuacion: result.puntuacion,
+      total: result.total,
+      incorrectas: result.incorrectas,
+      sinResponder: result.sinResponder,
+      porcentaje: result.porcentaje,
+      puntajeCaces: result.puntajeCaces,
+      aprobado: result.aprobado,
+      tiempo: result.tiempo,
+      desglose: result.desglose || {},
+      respuestasUsuario: result.respuestasUsuario || {},
+      fecha: new Date().toISOString(),
+      fechaTexto: result.fecha || '',
+      deviceId: this.deviceId
+    };
 
     const profile = this.getUserProfile();
 
-    let history = this.getExamHistory();
-    history.unshift(result);
-    if (history.length > 100) history = history.slice(0, 100);
-    localStorage.setItem('caces_exam_history', JSON.stringify(history));
+    try {
+      let history = this.getExamHistory();
+      history.unshift(historyEntry);
+      if (history.length > 100) history = history.slice(0, 100);
+      localStorage.setItem('caces_exam_history', JSON.stringify(history));
+    } catch (e) {
+      console.warn("Advertencia al guardar historial local:", e);
+    }
 
     if (this.supabaseClient) {
       try {
@@ -514,8 +638,8 @@ class StorageManager {
       }
     }
 
-    await this.syncUserProgressToCloud();
-    return result;
+    this.scheduleAutoCloudSync(1000);
+    return historyEntry;
   }
 
   getExamHistory() {
@@ -527,16 +651,29 @@ class StorageManager {
     }
   }
 
-  registerAnswer(questionId, isCorrect) {
+  /**
+   * Registra el resultado de una pregunta en el banco de errores (La Morgue),
+   * guardando también la opción errónea seleccionada para mostrar su análisis completo.
+   */
+  registerAnswer(questionId, isCorrect, selectedOption = null) {
     let errors = this.getErrorBank();
     if (!isCorrect) {
       if (!errors[questionId]) {
-        errors[questionId] = { fallos: 1, aciertos_seguidos: 0, ultimo_fallo: Date.now(), dominada: false };
+        errors[questionId] = {
+          fallos: 1,
+          aciertos_seguidos: 0,
+          ultimo_fallo: Date.now(),
+          dominada: false,
+          ultima_opcion_erronea: selectedOption || null
+        };
       } else {
-        errors[questionId].fallos += 1;
+        errors[questionId].fallos = (errors[questionId].fallos || 0) + 1;
         errors[questionId].aciertos_seguidos = 0;
         errors[questionId].ultimo_fallo = Date.now();
         errors[questionId].dominada = false;
+        if (selectedOption) {
+          errors[questionId].ultima_opcion_erronea = selectedOption;
+        }
       }
     } else {
       if (errors[questionId]) {
@@ -598,6 +735,7 @@ class StorageManager {
     localStorage.removeItem('caces_exam_history');
     localStorage.removeItem('caces_error_bank');
     localStorage.removeItem('caces_bookmarks');
+    this.clearActiveSession();
     localStorage.setItem('caces_force_empty', 'true');
 
     if (this.supabaseClient) {

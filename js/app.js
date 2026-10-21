@@ -126,20 +126,24 @@ class AppController {
     this.arcade = new ArcadeManager((txt) => formatClinicalMarkdown(txt, { inline: true }));
     this.currentTab = 'simulacro';
     this.activeDialMode = 'simulacro'; // 'simulacro' | 'estudio'
+    this.lastEstudioTab = 'simulacro';
     this.extractedQuestionsPreview = [];
+    this.pcSidebarCollapsed = false;
 
-    // Enlazar autoguardado en la nube cada vez que cambie el XP o la racha
+    // Enlazar autoguardado seguro en la nube cada vez que cambie el XP o la racha
     const origAddXP = this.arcade.addXP.bind(this.arcade);
     this.arcade.addXP = (amount, isCorrectStreak = true, triggerToast = true) => {
-      // En modo simulador formal ('caces'), no disparar jamás felicitaciones ni toasts de racha
       const isSimulacro = this.engine && this.engine.mode === 'caces';
       origAddXP(amount, isCorrectStreak, isSimulacro ? false : triggerToast);
-      Storage.scheduleAutoCloudSync();
+      if (typeof Storage.scheduleAutoCloudSync === 'function') {
+        Storage.scheduleAutoCloudSync();
+      }
     };
   }
 
   async init() {
     this.bindLeftDrawer();
+    this.bindRightExamDrawerAndCollapsibles();
     this.bindModeDial();
     this.bindNavigation();
     this.bindThemeAndSFXToggle();
@@ -164,7 +168,6 @@ class AppController {
       });
     }
 
-    // Si hay usuario con sesión activa, recuperar respaldo de la nube automáticamente
     const activeProfile = Storage.getUserProfile();
     if (activeProfile?.email) {
       Storage.pullUserProgressFromCloud(activeProfile.email).then((pulled) => {
@@ -179,11 +182,23 @@ class AppController {
     this.arcade.updateHUD();
     this.refreshAuthUI();
 
+    this.engine.onTick = (timeData) => this.renderTimer(timeData);
+    this.engine.onStateChange = (state) => this.renderExamState(state);
+    this.engine.onFinish = (summary) => this.renderExamSummary(summary);
+
     try {
       const questions = await this.engine.loadQuestions();
       this.updateQuestionCountBadge(questions.length);
     } catch (e) {
       console.error("Error al cargar banco de preguntas:", e);
+    }
+
+    // Restaurar automáticamente simulador o tutor en curso si el usuario recargó o cerró el navegador
+    const restoreResult = this.engine.restoreActiveSession();
+    if (restoreResult) {
+      const restoredDial = this.engine.mode === 'caces' ? 'simulacro' : 'estudio';
+      this.syncDialVisualsOnly(restoredDial);
+      this.applyEngineStatusToScreens(restoreResult);
     }
 
     const handleClearToZero = async () => {
@@ -201,10 +216,6 @@ class AppController {
     document.getElementById('btn-quick-clear-db')?.addEventListener('click', handleClearToZero);
     document.getElementById('btn-import-clear-db')?.addEventListener('click', handleClearToZero);
 
-    this.engine.onTick = (timeData) => this.renderTimer(timeData);
-    this.engine.onStateChange = (state) => this.renderExamState(state);
-    this.engine.onFinish = (summary) => this.renderExamSummary(summary);
-
     const urlInput = document.getElementById('supabase-url');
     const keyInput = document.getElementById('supabase-key');
     if (urlInput) urlInput.value = SupabaseConfig.getUrl();
@@ -212,7 +223,6 @@ class AppController {
 
     this.checkCloudStatus();
 
-    // Sincronización automática de sesión con Google / Supabase
     if (Storage.supabaseClient?.auth) {
       Storage.supabaseClient.auth.getSession().then(({ data: { session } }) => {
         if (session && session.user) {
@@ -247,7 +257,7 @@ class AppController {
   }
 
   // =========================================================================
-  // MENÚ HAMBURGUESA LATERAL IZQUIERDO (ESCALAS, STATS, RANGOS)
+  // MENÚ HAMBURGUESA IZQUIERDO Y PANEL DERECHO DEL EXAMEN (PC Y CELULAR)
   // =========================================================================
   bindLeftDrawer() {
     const drawer = document.getElementById('left-drawer');
@@ -288,24 +298,95 @@ class AppController {
     });
   }
 
-  // =========================================================================
-  // DIAL INTERACTIVO: DIFERENCIACIÓN TOTAL SIMULADOR vs MODO ESTUDIO
-  // =========================================================================
-  bindModeDial() {
-    const dialBtns = document.querySelectorAll('[data-dial-mode]');
-    dialBtns.forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const mode = e.currentTarget.getAttribute('data-dial-mode');
-        this.setDialMode(mode);
-      });
+  bindRightExamDrawerAndCollapsibles() {
+    const rightSidebar = document.getElementById('exam-sidebar-col');
+    const rightBackdrop = document.getElementById('right-exam-drawer-backdrop');
+    const btnOpenMobile = document.getElementById('btn-open-right-exam-drawer');
+    const btnCloseMobile = document.getElementById('btn-close-right-exam-drawer');
+
+    const openRightDrawer = () => {
+      if (!rightSidebar || !rightBackdrop) return;
+      rightBackdrop.classList.remove('hidden');
+      rightSidebar.classList.remove('translate-x-full');
+    };
+
+    const closeRightDrawer = () => {
+      if (!rightSidebar || !rightBackdrop) return;
+      rightSidebar.classList.add('translate-x-full');
+      rightBackdrop.classList.add('hidden');
+    };
+
+    this.closeRightExamDrawer = closeRightDrawer;
+
+    btnOpenMobile?.addEventListener('click', openRightDrawer);
+    btnCloseMobile?.addEventListener('click', closeRightDrawer);
+    rightBackdrop?.addEventListener('click', closeRightDrawer);
+
+    // PC: Botón para colapsar/expandir todo el panel lateral derecho
+    const btnTogglePcSidebar = document.getElementById('btn-toggle-pc-sidebar');
+    const pcToggleLabel = document.getElementById('pc-sidebar-toggle-label');
+    const mainCol = document.getElementById('exam-main-col');
+
+    btnTogglePcSidebar?.addEventListener('click', () => {
+      this.pcSidebarCollapsed = !this.pcSidebarCollapsed;
+      if (this.pcSidebarCollapsed) {
+        rightSidebar?.classList.add('lg:hidden');
+        mainCol?.classList.remove('lg:col-span-9');
+        mainCol?.classList.add('lg:col-span-12');
+        if (pcToggleLabel) pcToggleLabel.textContent = 'Mostrar Mapa y Reloj';
+      } else {
+        rightSidebar?.classList.remove('lg:hidden');
+        mainCol?.classList.remove('lg:col-span-12');
+        mainCol?.classList.add('lg:col-span-9');
+        if (pcToggleLabel) pcToggleLabel.textContent = 'Ocultar Mapa';
+      }
+    });
+
+    // Colapsar sección de Clasificación (Modo Tutor)
+    const btnCollapseClass = document.getElementById('btn-collapse-classification');
+    const bodyClass = document.getElementById('unified-classification-body');
+    const iconClass = document.getElementById('classification-collapse-icon');
+    btnCollapseClass?.addEventListener('click', () => {
+      if (!bodyClass) return;
+      const isHidden = bodyClass.classList.toggle('hidden');
+      if (iconClass) iconClass.textContent = isHidden ? '+' : '−';
+    });
+
+    // Colapsar sección de Mapa de Reactivos
+    const btnCollapseMap = document.getElementById('btn-collapse-map-section');
+    const bodyMap = document.getElementById('unified-map-body');
+    const iconMap = document.getElementById('map-collapse-icon');
+    btnCollapseMap?.addEventListener('click', () => {
+      if (!bodyMap) return;
+      const isHidden = bodyMap.classList.toggle('hidden');
+      if (iconMap) iconMap.textContent = isHidden ? '[+]' : '[−]';
     });
   }
 
-  setDialMode(mode) {
-    this.activeDialMode = mode === 'estudio' ? 'estudio' : 'simulacro';
-    this.arcade.playTone('beep');
+  // =========================================================================
+  // CONTROL DE VISIBILIDAD DE LA BARRA DE ESTUDIO Y DEL DIAL
+  // =========================================================================
+  updateStudyNavbarVisibility() {
+    const studyNavbar = document.getElementById('study-mode-navbar');
+    if (!studyNavbar) return;
 
-    // 1. Actualizar estado visual de los Diales (Desktop y Mobile)
+    const activeScreen = document.getElementById('exam-active-screen');
+    const isDoingQuestionsInTutor =
+      this.currentTab === 'simulacro' &&
+      activeScreen &&
+      !activeScreen.classList.contains('hidden');
+
+    // En Modo Simulador o mientras se está respondiendo en Modo Tutor, ocultar la barra de Arcade/Cards para no saturar
+    if (this.activeDialMode !== 'estudio' || isDoingQuestionsInTutor) {
+      studyNavbar.classList.add('hidden');
+    } else {
+      studyNavbar.classList.remove('hidden');
+    }
+  }
+
+  syncDialVisualsOnly(mode) {
+    this.activeDialMode = mode === 'estudio' ? 'estudio' : 'simulacro';
+
     ['header-mode-dial', 'mobile-mode-dial'].forEach(id => {
       const wrapper = document.getElementById(id);
       if (!wrapper) return;
@@ -322,42 +403,87 @@ class AppController {
       });
     });
 
-    // 2. Mostrar u ocultar la barra de herramientas de estudio (Cards, Morgue, Temario, Explorador, Arcade)
-    const studyNavbar = document.getElementById('study-mode-navbar');
     const simPanel = document.getElementById('setup-panel-simulacro');
     const estPanel = document.getElementById('setup-panel-estudio');
     const sideSimInfo = document.getElementById('setup-side-simulacro-info');
     const sideArcadePromo = document.getElementById('setup-arcade-promo-card');
 
     if (this.activeDialMode === 'estudio') {
-      // MODO ESTUDIO: Desbloquea barra con Tutor, Temario, Explorador, Cards, Morgue y Arcade
-      studyNavbar?.classList.remove('hidden');
       simPanel?.classList.add('hidden');
       estPanel?.classList.remove('hidden');
       sideSimInfo?.classList.add('hidden');
       sideArcadePromo?.classList.remove('hidden');
     } else {
-      // MODO SIMULADOR: Oculta Cards, Morgue, Temario, Explorador y Arcade. Solo deja el Simulador puro.
-      studyNavbar?.classList.add('hidden');
       estPanel?.classList.add('hidden');
       simPanel?.classList.remove('hidden');
       sideArcadePromo?.classList.add('hidden');
       sideSimInfo?.classList.remove('hidden');
+    }
 
-      // Si el usuario estaba en Cards, Morgue, Temario, Explorador o Arcade, regresarlo al Simulador
-      if (['temario', 'explorador', 'flashcards', 'errores', 'arcade'].includes(this.currentTab)) {
-        this.switchTab('simulacro');
+    this.updateStudyNavbarVisibility();
+  }
+
+  bindModeDial() {
+    const dialBtns = document.querySelectorAll('[data-dial-mode]');
+    dialBtns.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const mode = e.currentTarget.getAttribute('data-dial-mode');
+        this.setDialMode(mode);
+      });
+    });
+  }
+
+  applyEngineStatusToScreens(status) {
+    const setupScreen = document.getElementById('exam-setup-screen');
+    const activeScreen = document.getElementById('exam-active-screen');
+    const resultsScreen = document.getElementById('exam-results-screen');
+
+    if (status === 'finished' && this.engine.lastSummary) {
+      setupScreen?.classList.add('hidden');
+      activeScreen?.classList.add('hidden');
+      this.renderExamSummary(this.engine.lastSummary);
+    } else if (status === 'reviewing' || status === true) {
+      setupScreen?.classList.add('hidden');
+      resultsScreen?.classList.add('hidden');
+      activeScreen?.classList.remove('hidden');
+    } else {
+      activeScreen?.classList.add('hidden');
+      resultsScreen?.classList.add('hidden');
+      setupScreen?.classList.remove('hidden');
+    }
+    this.updateStudyNavbarVisibility();
+  }
+
+  setDialMode(mode) {
+    const targetMode = mode === 'estudio' ? 'estudio' : 'simulacro';
+    this.arcade.playTone('beep');
+
+    if (targetMode === this.activeDialMode) {
+      this.switchTab('simulacro');
+      this.updateStudyNavbarVisibility();
+      return;
+    }
+
+    // Si estamos saliendo de Modo Estudio, recordar en qué pestaña estaba trabajando el usuario
+    if (this.activeDialMode === 'estudio') {
+      const studyTabs = ['simulacro', 'temario', 'explorador', 'flashcards', 'errores', 'arcade'];
+      if (studyTabs.includes(this.currentTab)) {
+        this.lastEstudioTab = this.currentTab;
       }
     }
 
-    // 3. Si hay una pregunta activa en pantalla, adaptar el comportamiento al modo del dial
-    if (this.currentTab === 'simulacro') {
-      const activeScreen = document.getElementById('exam-active-screen');
-      if (activeScreen && !activeScreen.classList.contains('hidden') && !this.engine.isFinished) {
-        this.engine.mode = this.activeDialMode === 'estudio' ? 'study' : 'caces';
-        this.renderExamState(this.engine.getState());
-      }
+    // Cambiar de contexto preservando intacto el progreso tanto de Modo Estudio como de Modo Simulador
+    const restoredStatus = this.engine.switchModeContext(targetMode);
+    this.syncDialVisualsOnly(targetMode);
+    this.applyEngineStatusToScreens(restoredStatus);
+
+    if (targetMode === 'estudio') {
+      const tabToRestore = this.lastEstudioTab || 'simulacro';
+      this.switchTab(tabToRestore, { preserveModuleState: true });
+    } else {
+      this.switchTab('simulacro', { preserveModuleState: true });
     }
+    this.updateStudyNavbarVisibility();
   }
 
   // =========================================================================
@@ -500,7 +626,6 @@ class AppController {
       msgEl.textContent = txt;
     };
 
-    // 1. Inicio de Sesión con Google
     document.getElementById('btn-login-google')?.addEventListener('click', async () => {
       try {
         showMsg('Conectando con Google...', false);
@@ -518,7 +643,6 @@ class AppController {
       }
     });
 
-    // 2. Inicio de Sesión Manual Alternativo
     document.getElementById('btn-submit-auth')?.addEventListener('click', async () => {
       const name = document.getElementById('auth-name-input')?.value || '';
       const email = document.getElementById('auth-email-input')?.value || '';
@@ -538,19 +662,17 @@ class AppController {
       }
     });
 
-    // 3. Forzar sincronización manual
     document.getElementById('btn-force-sync')?.addEventListener('click', async () => {
       showMsg('Sincronizando datos con la nube...', false);
       const res = await Storage.syncUserProgressToCloud();
       if (res && res.synced) {
-        showMsg('✅ Sincronización con la nube completada.', false);
+        showMsg('Sincronización con la nube completada.', false);
       } else {
-        showMsg('✅ Progreso respaldado correctamente.', false);
+        showMsg('Progreso respaldado correctamente.', false);
       }
       setTimeout(() => msgEl?.classList.add('hidden'), 2500);
     });
 
-    // 4. Cerrar Sesión
     document.getElementById('btn-logout-auth')?.addEventListener('click', () => {
       Storage.logoutUser();
       this.refreshAuthUI();
@@ -627,7 +749,7 @@ class AppController {
   }
 
   // =========================================================================
-  // DESBLOQUEO SECRETO DE ADMINISTRADOR (5 CLICS EN LOGO O CTRL+SHIFT+A)
+  // DESBLOQUEO SECRETO DE ADMINISTRADOR
   // =========================================================================
   bindSecretAdminAccess() {
     const adminBox = document.getElementById('admin-only-controls');
@@ -764,8 +886,12 @@ class AppController {
     });
   }
 
-  switchTab(tabId) {
+  switchTab(tabId, { preserveModuleState = false } = {}) {
     this.currentTab = tabId;
+    if (this.activeDialMode === 'estudio' && ['simulacro', 'temario', 'explorador', 'flashcards', 'errores', 'arcade'].includes(tabId)) {
+      this.lastEstudioTab = tabId;
+    }
+
     if (this.arcade.blitzInterval && tabId !== 'arcade') {
       clearInterval(this.arcade.blitzInterval);
     }
@@ -783,20 +909,32 @@ class AppController {
       activeBtn.classList.add('nav-tab-active');
     }
 
+    this.updateStudyNavbarVisibility();
+
     if (tabId === 'arcade') {
-      this.arcade.initArcade(this.engine.allQuestions);
+      if (!preserveModuleState || !document.getElementById('arcade-stage')?.innerHTML.trim()) {
+        this.arcade.initArcade(this.engine.allQuestions);
+      }
     } else if (tabId === 'temario') {
-      this.renderTemarioHub();
+      if (!preserveModuleState || !document.getElementById('temario-cards-container')?.children.length) {
+        this.renderTemarioHub();
+      }
     } else if (tabId === 'analitica') {
       Analytics.renderStats();
     } else if (tabId === 'errores') {
       this.renderErrorsList();
     } else if (tabId === 'flashcards') {
-      this.initFlashcards();
+      if (!preserveModuleState || !Flashcards.deck || Flashcards.deck.length === 0) {
+        this.initFlashcards();
+      } else {
+        this.renderFlashcard();
+      }
     } else if (tabId === 'calculadoras') {
       this.initCalculators();
     } else if (tabId === 'explorador') {
-      this.renderExplorador();
+      if (!preserveModuleState || !document.getElementById('exp-questions-container')?.children.length) {
+        this.renderExplorador();
+      }
     }
   }
 
@@ -813,44 +951,68 @@ class AppController {
       });
     }
 
-    // Iniciar Simulacro Oficial (Con elección de cantidad de preguntas y especialidad o Todas)
     document.getElementById('btn-start-caces')?.addEventListener('click', () => {
       const count = parseInt(document.getElementById('caces-q-count')?.value || '100', 10);
       const specialty = document.getElementById('caces-specialty-select')?.value || 'Todas';
       this.startSessionWrapper({ mode: 'caces', count, specialty });
     });
 
-    document.getElementById('btn-prev-q')?.addEventListener('click', () => this.engine.prevQuestion());
-    document.getElementById('btn-next-q')?.addEventListener('click', () => this.engine.nextQuestion());
-    document.getElementById('btn-mark-q')?.addEventListener('click', () => this.engine.toggleCurrentMark());
-    document.getElementById('btn-jump-unanswered')?.addEventListener('click', () => this.engine.goToFirstUnanswered());
-
-    document.getElementById('btn-finish-exam')?.addEventListener('click', () => {
-      const unanswered = this.engine.sessionQuestions.length - Object.keys(this.engine.userAnswers).length;
-      let msg = '¿Deseas cerrar la sesión y obtener tu calificación EHEP?';
-      if (unanswered > 0) {
-        msg = `Tienes ${unanswered} pregunta(s) sin contestar. ¿Seguro que deseas cerrar la sesión?`;
+    const handleFinishAttempt = async () => {
+      if (this.closeRightExamDrawer) this.closeRightExamDrawer();
+      if (this.engine.isReviewing) {
+        this.engine.exitReview();
+        document.getElementById('exam-active-screen')?.classList.add('hidden');
+        document.getElementById('exam-results-screen')?.classList.remove('hidden');
+        this.updateStudyNavbarVisibility();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
       }
-      if (confirm(msg)) {
-        this.engine.finishExam();
+      await this.engine.finishExam();
+    };
+
+    this.handleFinishAttempt = handleFinishAttempt;
+
+    document.getElementById('btn-prev-q')?.addEventListener('click', () => this.engine.prevQuestion());
+    document.getElementById('btn-next-q')?.addEventListener('click', async () => {
+      const isLastQuestion = this.engine.currentIndex >= this.engine.sessionQuestions.length - 1;
+      if (isLastQuestion) {
+        await handleFinishAttempt();
+      } else {
+        this.engine.nextQuestion();
       }
     });
+    document.getElementById('btn-mark-q')?.addEventListener('click', () => this.engine.toggleCurrentMark());
+    document.getElementById('btn-jump-unanswered')?.addEventListener('click', () => {
+      this.engine.goToFirstUnanswered();
+      if (this.closeRightExamDrawer) this.closeRightExamDrawer();
+    });
+
+    document.getElementById('btn-finish-exam')?.addEventListener('click', handleFinishAttempt);
+    document.getElementById('btn-sidebar-finish-exam')?.addEventListener('click', handleFinishAttempt);
 
     document.getElementById('btn-restart-exam')?.addEventListener('click', () => {
+      this.engine.abandonSession();
       document.getElementById('exam-results-screen')?.classList.add('hidden');
+      document.getElementById('exam-active-screen')?.classList.add('hidden');
       document.getElementById('exam-setup-screen')?.classList.remove('hidden');
+      this.updateStudyNavbarVisibility();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     });
 
     document.getElementById('btn-review-exam')?.addEventListener('click', () => {
       document.getElementById('exam-results-screen')?.classList.add('hidden');
       document.getElementById('exam-active-screen')?.classList.remove('hidden');
       this.engine.startReview('all');
+      this.updateStudyNavbarVisibility();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     });
 
     document.getElementById('btn-review-exit')?.addEventListener('click', () => {
       this.engine.exitReview();
       document.getElementById('exam-active-screen')?.classList.add('hidden');
       document.getElementById('exam-results-screen')?.classList.remove('hidden');
+      this.updateStudyNavbarVisibility();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     });
 
     document.getElementById('btn-review-filter-all')?.addEventListener('click', () => {
@@ -865,8 +1027,51 @@ class AppController {
     });
 
     document.getElementById('btn-results-go-morgue')?.addEventListener('click', () => {
-      this.setDialMode('estudio');
+      this.engine.abandonSession();
+      document.getElementById('exam-results-screen')?.classList.add('hidden');
+      document.getElementById('exam-setup-screen')?.classList.remove('hidden');
+      this.syncDialVisualsOnly('estudio');
       this.switchTab('errores');
+    });
+
+    // Filtros de la revisión detallada en la pantalla de resultados
+    document.getElementById('btn-res-filter-all')?.addEventListener('click', () => {
+      this.setResultsReviewFilterUI('all');
+      if (this.engine.lastSummary) this.renderDetailedReviewList(this.engine.lastSummary, 'all');
+    });
+    document.getElementById('btn-res-filter-wrong')?.addEventListener('click', () => {
+      this.setResultsReviewFilterUI('wrong');
+      if (this.engine.lastSummary) this.renderDetailedReviewList(this.engine.lastSummary, 'wrong');
+    });
+    document.getElementById('btn-res-filter-correct')?.addEventListener('click', () => {
+      this.setResultsReviewFilterUI('correct');
+      if (this.engine.lastSummary) this.renderDetailedReviewList(this.engine.lastSummary, 'correct');
+    });
+
+    // Botones Descargar PDF de la Revisión del Examen
+    const triggerDownloadReviewPdf = () => {
+      if (this.engine.lastSummary) {
+        this.downloadExamReviewPDF(this.engine.lastSummary);
+      }
+    };
+    document.getElementById('btn-download-review-pdf')?.addEventListener('click', triggerDownloadReviewPdf);
+    document.getElementById('btn-download-review-pdf-secondary')?.addEventListener('click', triggerDownloadReviewPdf);
+    document.getElementById('btn-review-banner-pdf')?.addEventListener('click', triggerDownloadReviewPdf);
+  }
+
+  setResultsReviewFilterUI(activeFilter) {
+    const map = {
+      all: document.getElementById('btn-res-filter-all'),
+      wrong: document.getElementById('btn-res-filter-wrong'),
+      correct: document.getElementById('btn-res-filter-correct')
+    };
+    Object.entries(map).forEach(([key, btn]) => {
+      if (!btn) return;
+      if (key === activeFilter) {
+        btn.className = 'px-3.5 py-1.5 rounded-xl font-mono text-xs font-bold bg-emerald-500 text-slate-950';
+      } else {
+        btn.className = 'px-3.5 py-1.5 rounded-xl font-mono text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300';
+      }
     });
   }
 
@@ -889,6 +1094,8 @@ class AppController {
       document.getElementById('exam-setup-screen')?.classList.add('hidden');
       document.getElementById('exam-results-screen')?.classList.add('hidden');
       document.getElementById('exam-active-screen')?.classList.remove('hidden');
+      this.updateStudyNavbarVisibility();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
       alert(err.message || "Error al iniciar sesión.");
     }
@@ -941,43 +1148,59 @@ class AppController {
     });
   }
 
+  /**
+   * Otorga XP y felicitación en Modo Tutor ÚNICAMENTE una vez por pregunta
+   * y SOLO si el primer clic en esa pregunta fue la opción correcta.
+   */
   handleOptionSelectionWithXP(optionId) {
     const q = this.engine.getCurrentQuestion();
     if (!q || this.engine.isReviewing) return;
 
-    const alreadyAnswered = Boolean(this.engine.userAnswers[q.id]);
-    this.engine.selectAnswer(optionId);
+    const result = this.engine.selectAnswer(optionId);
 
-    if (!alreadyAnswered) {
-      if (this.engine.mode === 'caces') {
-        // En el Simulador Oficial CACES: experiencia formal de examen, neutra y sin felicitaciones
+    if (this.engine.mode === 'caces') {
+      if (result.changed) {
         this.arcade.playTone('beep');
-      } else {
-        // En Modo Estudio / Tutor o La Morgue (Errores): Feedback y felicitaciones por racha
-        if (optionId === q.correcta) {
-          this.arcade.playTone('correct');
-          const prevStreak = this.arcade.streak;
-          this.arcade.addXP(10, true, true);
+      }
+      return;
+    }
 
-          if (prevStreak === 0) {
-            this.arcade.triggerTutorCelebration();
-          }
-        } else {
-          this.arcade.playTone('wrong');
-          this.arcade.addXP(0, false, false);
+    // Modo Tutor / La Morgue: Solo cuenta el PRIMER clic sobre la pregunta
+    if (result.isFirstClickOnQuestion) {
+      if (result.isFirstClickCorrect) {
+        this.arcade.playTone('correct');
+        const prevStreak = this.arcade.streak;
+        this.arcade.addXP(10, true, true);
+        if (prevStreak === 0) {
+          this.arcade.triggerTutorCelebration();
         }
+      } else {
+        this.arcade.playTone('wrong');
+        this.arcade.addXP(0, false, false);
       }
     }
   }
 
   renderTimer(timeData) {
     const timerEl = document.getElementById('exam-timer');
-    if (!timerEl) return;
-    timerEl.textContent = timeData.formatted;
-    if (timeData.isUrgent) {
-      timerEl.classList.add('text-rose-500', 'animate-pulse');
-    } else {
-      timerEl.classList.remove('text-rose-500', 'animate-pulse');
+    const mobileTimerEl = document.getElementById('mobile-exam-timer');
+
+    if (timerEl) {
+      timerEl.textContent = timeData.formatted;
+      if (timeData.isUrgent) {
+        timerEl.classList.add('text-rose-500', 'animate-pulse');
+      } else {
+        timerEl.classList.remove('text-rose-500', 'animate-pulse');
+      }
+    }
+
+    if (mobileTimerEl) {
+      mobileTimerEl.textContent = timeData.formatted;
+      if (timeData.isUrgent) {
+        mobileTimerEl.classList.add('text-rose-500', 'animate-pulse');
+      } else {
+        mobileTimerEl.classList.remove('text-rose-500', 'animate-pulse');
+      }
     }
   }
 
@@ -989,23 +1212,29 @@ class AppController {
     if (modeBadge) {
       if (state.isReviewing) {
         modeBadge.textContent = 'Auditoría';
-        modeBadge.className = 'px-3 py-1 rounded-lg bg-amber-500/20 text-amber-600 dark:text-amber-300 border border-amber-500/30 font-mono text-xs sm:text-sm font-bold uppercase';
+        modeBadge.className = 'px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-600 dark:text-amber-300 border border-amber-500/30 font-mono text-[11px] sm:text-xs font-bold uppercase shrink-0';
       } else if (state.mode === 'caces') {
-        modeBadge.textContent = 'Simulacro Oficial';
-        modeBadge.className = 'px-3 py-1 rounded-lg bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 font-mono text-xs sm:text-sm font-bold uppercase';
+        modeBadge.textContent = 'Simulador';
+        modeBadge.className = 'px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 font-mono text-[11px] sm:text-xs font-bold uppercase shrink-0';
       } else if (state.mode === 'errors') {
         modeBadge.textContent = 'La Morgue';
-        modeBadge.className = 'px-3 py-1 rounded-lg bg-rose-500/15 text-rose-600 dark:text-rose-300 border border-rose-500/30 font-mono text-xs sm:text-sm font-bold uppercase';
+        modeBadge.className = 'px-2.5 py-1 rounded-lg bg-rose-500/15 text-rose-600 dark:text-rose-300 border border-rose-500/30 font-mono text-[11px] sm:text-xs font-bold uppercase shrink-0';
       } else {
-        modeBadge.textContent = 'Modo Estudio';
-        modeBadge.className = 'px-3 py-1 rounded-lg bg-sky-500/15 text-sky-700 dark:text-sky-300 border border-sky-500/30 font-mono text-xs sm:text-sm font-bold uppercase';
+        modeBadge.textContent = 'Modo Tutor';
+        modeBadge.className = 'px-2.5 py-1 rounded-lg bg-sky-500/15 text-sky-700 dark:text-sky-300 border border-sky-500/30 font-mono text-[11px] sm:text-xs font-bold uppercase shrink-0';
       }
     }
 
-    // En Modo Simulador estricto (durante el examen activo), ocultar botones de ayuda IA para simular examen real
+    // Ocultar botones de ayuda IA en Modo Simulador estricto
     const isStrictSimulator = state.mode === 'caces' && !state.isFinished && !state.isReviewing;
     document.getElementById('btn-open-ai-tutor-top')?.classList.toggle('hidden', isStrictSimulator);
     document.getElementById('btn-open-ai-tutor-inline')?.classList.toggle('hidden', isStrictSimulator);
+
+    // Ocultar la clasificación de la pregunta en Modo Simulador; incluirla en Modo Tutor/Auditoría dentro del panel unificado
+    const classificationBox = document.getElementById('unified-classification-section');
+    if (classificationBox) {
+      classificationBox.classList.toggle('hidden', isStrictSimulator);
+    }
 
     const reviewBanner = document.getElementById('exam-review-banner');
     if (reviewBanner) {
@@ -1043,7 +1272,10 @@ class AppController {
     if (optionsContainer) {
       optionsContainer.innerHTML = '';
       const selected = state.selectedAnswer;
-      const showFeedback = (state.mode === 'study' || state.mode === 'errors' || state.isFinished || state.isReviewing) && (selected || state.isReviewing);
+      // En modo tutor/La Morgue, mostrar feedback desde el primer intento registrado,
+      // aunque el usuario haya navegado y vuelto. En revisión, siempre mostrar.
+      const hasFirstAttempt = !!(state.firstAttemptAnswer);
+      const showFeedback = (state.mode === 'study' || state.mode === 'errors' || state.isFinished || state.isReviewing) && (selected || hasFirstAttempt || state.isReviewing);
       const opts = Array.isArray(q.opciones) ? q.opciones : [];
 
       opts.forEach(opt => {
@@ -1051,10 +1283,17 @@ class AppController {
         btn.type = 'button';
         btn.className = 'w-full text-left p-4 sm:p-5 rounded-2xl border transition-all flex items-start gap-4 ';
 
-        const isOptionSelected = selected === opt.id;
+        // En modo tutor con feedback, resaltar el primer intento (no el actual selectedAnswer)
+        // para que el usuario vea siempre qué eligió realmente
+        const effectiveSelected = showFeedback && (state.mode === 'study' || state.mode === 'errors') && state.firstAttemptAnswer
+          ? state.firstAttemptAnswer
+          : selected;
+        const isOptionSelected = effectiveSelected === opt.id;
         const isCorrectOption = opt.id === q.correcta;
 
         if (showFeedback) {
+          // Deshabilitar clics visualmente cuando ya hay feedback (modo tutor o revisión)
+          btn.className += 'cursor-default ';
           if (isCorrectOption) {
             btn.className += 'border-emerald-500 bg-emerald-500/15 text-slate-900 dark:text-white font-bold ring-2 ring-emerald-500/30';
           } else if (isOptionSelected && !isCorrectOption) {
@@ -1091,23 +1330,32 @@ class AppController {
       });
     }
 
-    // Panel de Justificación Clínica y Explicación Exclusiva de la Opción Fallada
     const justBox = document.getElementById('q-justification-box');
     if (justBox) {
       const selected = state.selectedAnswer;
-      const showFeedback = (state.mode === 'study' || state.mode === 'errors' || state.isFinished || state.isReviewing) && (selected || state.isReviewing);
+      // En modo tutor/La Morgue, mostrar feedback desde el primer intento registrado,
+      // aunque el usuario haya navegado y vuelto. En revisión, siempre mostrar.
+      const hasFirstAttempt = !!(state.firstAttemptAnswer);
+      const showFeedback = (state.mode === 'study' || state.mode === 'errors' || state.isFinished || state.isReviewing) && (selected || hasFirstAttempt || state.isReviewing);
+      // En modo tutor, usar el primer intento para mostrar el análisis de distractor correcto
+      const effectiveSelectedForFeedback = (state.mode === 'study' || state.mode === 'errors') && state.firstAttemptAnswer
+        ? state.firstAttemptAnswer
+        : selected;
       if (showFeedback) {
         justBox.classList.remove('hidden');
         const correctLetterEl = document.getElementById('q-correct-letter');
         if (correctLetterEl) correctLetterEl.textContent = q.correcta || 'A';
 
+        const isUnansweredReview = state.isReviewing && !effectiveSelectedForFeedback;
+
         const perlaBox = document.getElementById('q-perla-box');
         const perlaText = document.getElementById('q-perla-text');
         const fuenteEl = document.getElementById('q-fuente-text');
+        const effectivePearlContent = q.perla_caces || (isUnansweredReview ? (q.por_que_es || q.justificacion || '') : '');
         if (perlaBox && perlaText) {
-          if (q.perla_caces) {
+          if (effectivePearlContent) {
             perlaBox.classList.remove('hidden');
-            perlaText.innerHTML = formatClinicalMarkdown(q.perla_caces);
+            perlaText.innerHTML = formatClinicalMarkdown(effectivePearlContent);
           } else {
             perlaBox.classList.add('hidden');
           }
@@ -1117,10 +1365,16 @@ class AppController {
           fuenteEl.innerHTML = formatClinicalMarkdown(rawFuente, { inline: true });
         }
 
+        const toggleJustBtn = document.getElementById('btn-toggle-justification');
+        const justSectionWrap = toggleJustBtn ? toggleJustBtn.parentElement : null;
         const justDetail = document.getElementById('q-justification-detail');
         const arrowJust = document.getElementById('arrow-justification');
         if (justDetail) justDetail.classList.add('hidden');
         if (arrowJust) arrowJust.textContent = '+';
+
+        if (justSectionWrap) {
+          justSectionWrap.classList.toggle('hidden', isUnansweredReview);
+        }
 
         const justEl = document.getElementById('q-justification-text');
         if (justEl) {
@@ -1134,38 +1388,27 @@ class AppController {
         if (distractorsList && distractorsContainer) {
           distractorsList.innerHTML = '';
 
-          // Mostrar SOLO si el usuario seleccionó una opción y esa opción era INCORRECTA
-          if (selected && selected !== q.correcta) {
+          if (!isUnansweredReview && effectiveSelectedForFeedback && effectiveSelectedForFeedback !== q.correcta) {
             distractorsContainer.classList.remove('hidden');
             const opts = Array.isArray(q.opciones) ? q.opciones : [];
-            const chosenOpt = opts.find(o => o && o.id === selected);
-            const optTxt = chosenOpt ? formatClinicalMarkdown(chosenOpt.texto || chosenOpt.text || '', { inline: true }) : `Opción ${selected}`;
-            const whyNot = breakdown[selected];
+            const chosenOpt = opts.find(o => o && o.id === effectiveSelectedForFeedback);
+            const optTxt = chosenOpt ? formatClinicalMarkdown(chosenOpt.texto || chosenOpt.text || '', { inline: true }) : `Opción ${effectiveSelectedForFeedback}`;
+            const whyNot = breakdown[effectiveSelectedForFeedback] || `No constituye la conducta de primera elección según la guía del MSP. La respuesta correcta es la opción ${q.correcta}.`;
 
-            if (whyNot) {
-              const item = document.createElement('div');
-              item.className = 'p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 space-y-1.5';
-              item.innerHTML = `
-                <div class="flex items-center gap-2 font-mono text-xs sm:text-sm font-bold text-rose-600 dark:text-rose-400">
-                  ${ICONS.cross}
-                  <span>TU ELECCIÓN (OPCIÓN ${selected}): ${optTxt}</span>
-                </div>
-                <div class="clinical-prose text-xs sm:text-sm text-slate-700 dark:text-slate-300 leading-relaxed pl-6">${formatClinicalMarkdown(whyNot)}</div>
-              `;
-              distractorsList.appendChild(item);
-            } else {
-              distractorsList.innerHTML = `
-                <div class="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/25 text-xs sm:text-sm text-slate-700 dark:text-slate-300 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <span>Elegiste la <b>Opción ${selected}</b> (${optTxt}), que no constituye la conducta de primera elección en este escenario clínico.</span>
-                  <button type="button" class="text-emerald-600 dark:text-emerald-400 font-mono font-bold underline text-left shrink-0" onclick="document.getElementById('btn-ai-generate-breakdown')?.click()">Explicar por qué con IA</button>
-                </div>
-              `;
-            }
+            const item = document.createElement('div');
+            item.className = 'p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 space-y-1.5';
+            item.innerHTML = `
+              <div class="flex items-center gap-2 font-mono text-xs sm:text-sm font-bold text-rose-600 dark:text-rose-400">
+                ${ICONS.cross}
+                <span>TU ELECCIÓN (OPCIÓN ${effectiveSelectedForFeedback}): ${optTxt}</span>
+              </div>
+              <div class="clinical-prose text-xs sm:text-sm text-slate-700 dark:text-slate-300 leading-relaxed pl-6">${formatClinicalMarkdown(whyNot)}</div>
+            `;
+            distractorsList.appendChild(item);
           } else {
             distractorsContainer.classList.add('hidden');
           }
         }
-
       } else {
         justBox.classList.add('hidden');
       }
@@ -1174,11 +1417,45 @@ class AppController {
     const markBtn = document.getElementById('btn-mark-q');
     if (markBtn) {
       if (state.isMarked) {
-        markBtn.className = 'bto-btn px-4 py-2 rounded-xl bg-amber-400 text-slate-950 text-sm font-bold border-transparent flex items-center gap-1.5';
-        markBtn.innerHTML = `${ICONS.bookmarkFilled} <span class="hidden sm:inline">En Duda</span>`;
+        markBtn.className = 'bto-btn px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-amber-400 text-slate-950 text-xs sm:text-sm font-bold border-transparent flex items-center gap-1.5';
+        markBtn.innerHTML = `${ICONS.bookmarkFilled} <span class="hidden md:inline">En Duda</span>`;
       } else {
-        markBtn.className = 'bto-btn px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-900 text-sm font-semibold flex items-center gap-1.5';
-        markBtn.innerHTML = `${ICONS.bookmarkOutline} <span class="hidden sm:inline">Marcar Duda</span>`;
+        markBtn.className = 'bto-btn px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-slate-100 dark:bg-slate-900 text-xs sm:text-sm font-semibold flex items-center gap-1.5';
+        markBtn.innerHTML = `${ICONS.bookmarkOutline} <span class="hidden md:inline">Duda</span>`;
+      }
+    }
+
+    const finishBtnTop = document.getElementById('btn-finish-exam');
+    if (finishBtnTop) {
+      if (state.isReviewing) {
+        finishBtnTop.textContent = 'Ver Informe y PDF';
+        finishBtnTop.className = 'bto-btn px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 text-xs sm:text-sm font-bold border-transparent';
+      } else {
+        finishBtnTop.textContent = 'Terminar Intento';
+        finishBtnTop.className = 'bto-btn px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-xs sm:text-sm font-bold border-transparent';
+      }
+    }
+
+    const prevBtn = document.getElementById('btn-prev-q');
+    if (prevBtn) {
+      prevBtn.disabled = state.index <= 0;
+      prevBtn.classList.toggle('opacity-50', state.index <= 0);
+    }
+
+    const nextBtn = document.getElementById('btn-next-q');
+    if (nextBtn) {
+      const isLast = state.index >= state.total - 1;
+      if (isLast) {
+        if (state.isReviewing) {
+          nextBtn.textContent = 'Volver al Informe →';
+          nextBtn.className = 'bto-btn px-6 sm:px-7 py-3 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-950 text-sm sm:text-base font-bold border-transparent';
+        } else {
+          nextBtn.textContent = 'Terminar Intento y Revisar ✓';
+          nextBtn.className = 'bto-btn px-6 sm:px-7 py-3 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-sm sm:text-base font-bold border-transparent shadow-md shadow-rose-500/25';
+        }
+      } else {
+        nextBtn.textContent = 'Siguiente →';
+        nextBtn.className = 'bto-btn px-6 sm:px-7 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 text-sm sm:text-base font-bold border-transparent';
       }
     }
 
@@ -1213,20 +1490,27 @@ class AppController {
       }
 
       cell.textContent = idx + 1;
-      cell.addEventListener('click', () => this.engine.goToQuestion(idx));
+      cell.addEventListener('click', () => {
+        this.engine.goToQuestion(idx);
+        if (this.closeRightExamDrawer) this.closeRightExamDrawer();
+      });
       matrix.appendChild(cell);
     });
   }
 
+  // =========================================================================
+  // INFORME DE RESULTADOS + REVISIÓN COMPLETA DE PREGUNTAS + PDF
+  // =========================================================================
   renderExamSummary(summary) {
     document.getElementById('exam-active-screen')?.classList.add('hidden');
     const resultsScreen = document.getElementById('exam-results-screen');
     if (!resultsScreen) return;
     resultsScreen.classList.remove('hidden');
+    this.updateStudyNavbarVisibility();
 
     document.getElementById('res-score').textContent = `${summary.puntuacion} / ${summary.total}`;
     document.getElementById('res-percentage').textContent = `${summary.porcentaje}%`;
-    
+
     const cacesPts = summary.puntajeCaces || (summary.porcentaje < 60
       ? Math.round((summary.porcentaje / 60) * 700)
       : Math.round(700 + ((summary.porcentaje - 60) / 40) * 300));
@@ -1241,10 +1525,10 @@ class AppController {
     if (statusBadge) {
       if (summary.aprobado) {
         this.arcade.addXP(100, false, false);
-        statusBadge.className = 'inline-block px-5 py-2 rounded-full font-mono text-sm font-bold bg-emerald-500 text-slate-950';
+        statusBadge.className = 'inline-block px-5 py-2 rounded-full font-mono text-xs sm:text-sm font-bold bg-emerald-500 text-slate-950';
         statusBadge.textContent = `HABILITADO CACES: ${cacesPts} / 1000 PTS (≥ 700 pts requeridos • +100 XP)`;
       } else {
-        statusBadge.className = 'inline-block px-5 py-2 rounded-full font-mono text-sm font-bold bg-rose-500 text-white';
+        statusBadge.className = 'inline-block px-5 py-2 rounded-full font-mono text-xs sm:text-sm font-bold bg-rose-500 text-white';
         statusBadge.textContent = `NO ALCANZA UMBRAL: ${cacesPts} / 1000 PTS (Se requiere ≥ 700 pts)`;
       }
     }
@@ -1275,8 +1559,722 @@ class AppController {
         container.appendChild(row);
       });
     }
+
+    // Renderizar revisión completa pregunta por pregunta inmediatamente debajo
+    this.setResultsReviewFilterUI('all');
+    this.renderDetailedReviewList(summary, 'all');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
+  renderDetailedReviewList(summary, filter = 'all') {
+    const listContainer = document.getElementById('res-detailed-review-list');
+    if (!listContainer) return;
+
+    const questions = summary.preguntasSesion || this.engine.sessionQuestions || [];
+    const userAnswers = summary.respuestasUsuario || this.engine.userAnswers || {};
+
+    const filteredItems = questions
+      .map((q, idx) => ({ q, idx, userAns: userAnswers[q.id] || null }))
+      .filter(item => {
+        const isCorrect = item.userAns === item.q.correcta;
+        if (filter === 'wrong') return !isCorrect;
+        if (filter === 'correct') return isCorrect;
+        return true;
+      });
+
+    if (filteredItems.length === 0) {
+      listContainer.innerHTML = `
+        <div class="p-8 text-center rounded-2xl bg-slate-50 dark:bg-slate-900 text-slate-500 font-medium">
+          No hay preguntas en esta categoría para mostrar.
+        </div>
+      `;
+      return;
+    }
+
+    listContainer.innerHTML = '';
+
+    filteredItems.forEach(({ q, idx, userAns }) => {
+      const isCorrect = userAns === q.correcta;
+      const isUnanswered = !userAns;
+      const breakdown = q.desglose_opciones || q.distractores || {};
+      const opts = Array.isArray(q.opciones) ? q.opciones : [];
+
+      let statusBadgeHtml = '';
+      if (isCorrect) {
+        statusBadgeHtml = `<span class="px-3 py-1 rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 font-mono text-xs font-bold">CORRECTA</span>`;
+      } else if (isUnanswered) {
+        statusBadgeHtml = `<span class="px-3 py-1 rounded-lg bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 font-mono text-xs font-bold">SIN RESPONDER</span>`;
+      } else {
+        statusBadgeHtml = `<span class="px-3 py-1 rounded-lg bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30 font-mono text-xs font-bold">INCORRECTA (Marcaste ${userAns})</span>`;
+      }
+
+      const optionsHtml = opts.map(opt => {
+        const isOptCorrect = opt.id === q.correcta;
+        const isOptSelected = opt.id === userAns;
+        const optText = formatClinicalMarkdown(opt.texto || opt.text || '', { inline: true });
+
+        let boxStyle = 'border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/50 text-slate-700 dark:text-slate-300';
+        let badgeStyle = 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400';
+        let tagLabel = '';
+
+        if (isOptCorrect) {
+          boxStyle = 'border-emerald-500 bg-emerald-500/15 text-slate-900 dark:text-white font-semibold';
+          badgeStyle = 'bg-emerald-500 text-slate-950';
+          tagLabel = `<span class="ml-2 px-2 py-0.5 rounded bg-emerald-500 text-slate-950 font-mono text-[10px] font-bold uppercase">Clave Oficial</span>`;
+        } else if (isOptSelected && !isOptCorrect) {
+          boxStyle = 'border-rose-500 bg-rose-500/15 text-slate-900 dark:text-white font-semibold';
+          badgeStyle = 'bg-rose-500 text-white';
+          tagLabel = `<span class="ml-2 px-2 py-0.5 rounded bg-rose-500 text-white font-mono text-[10px] font-bold uppercase">Tu Respuesta</span>`;
+        }
+
+        return `
+          <div class="p-3.5 rounded-xl border ${boxStyle} flex items-start gap-3 text-xs sm:text-sm">
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded-lg font-mono font-bold shrink-0 ${badgeStyle}">${opt.id}</span>
+            <div class="flex-1 leading-relaxed">${optText} ${tagLabel}</div>
+          </div>
+        `;
+      }).join('');
+
+      let wrongExplanationHtml = '';
+      let officialJustificationHtml = '';
+      let perlaHtml = '';
+
+      if (isUnanswered) {
+        // Cuando la pregunta está sin responder: mostrar únicamente la Perla CACES y nada más
+        const perlaContent = q.perla_caces || q.por_que_es || q.justificacion || 'Revisa este tema en la Guía de Práctica Clínica del MSP Ecuador.';
+        perlaHtml = `
+          <div class="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-1">
+            <span class="font-mono text-xs font-bold uppercase text-amber-700 dark:text-amber-300 flex items-center gap-1.5">
+              ${ICONS.diamond}
+              <span>Perla CACES:</span>
+            </span>
+            <div class="clinical-prose text-xs sm:text-sm text-slate-800 dark:text-slate-100 font-medium">${formatClinicalMarkdown(perlaContent)}</div>
+            ${q.guia_msp || q.fuente ? `<div class="font-mono text-[11px] text-slate-500 pt-1">Normativa: ${formatClinicalMarkdown(q.guia_msp || q.fuente, { inline: true })}</div>` : ''}
+          </div>
+        `;
+      } else {
+        if (!isCorrect) {
+          const chosenOptObj = opts.find(o => o.id === userAns);
+          const chosenText = chosenOptObj ? formatClinicalMarkdown(chosenOptObj.texto || chosenOptObj.text || '', { inline: true }) : '';
+          const specificWhyNot = breakdown[userAns]
+            || (q.por_que_es || q.justificacion || `La conducta correcta corresponde a la opción ${q.correcta} según protocolo oficial del MSP.`);
+
+          wrongExplanationHtml = `
+            <div class="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 space-y-1.5">
+              <div class="font-mono text-xs font-bold uppercase text-rose-600 dark:text-rose-400 flex items-center gap-1.5">
+                ${ICONS.cross}
+                <span>Por qué la opción ${userAns} no es correcta:</span>
+              </div>
+              ${chosenText ? `<div class="text-xs font-semibold text-slate-600 dark:text-slate-300 italic">"${chosenText}"</div>` : ''}
+              <div class="clinical-prose text-xs sm:text-sm text-slate-800 dark:text-slate-200 leading-relaxed">${formatClinicalMarkdown(specificWhyNot)}</div>
+            </div>
+          `;
+        }
+
+        officialJustificationHtml = `
+          <div class="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 space-y-1">
+            <span class="font-mono text-xs font-bold uppercase text-emerald-700 dark:text-emerald-300 block">Fundamento Clínico (Clave ${q.correcta}):</span>
+            <div class="clinical-prose text-xs sm:text-sm text-slate-800 dark:text-slate-200 leading-relaxed">${formatClinicalMarkdown(q.por_que_es || q.justificacion || 'Respaldado por la Guía de Práctica Clínica del MSP Ecuador.')}</div>
+          </div>
+        `;
+
+        if (q.perla_caces) {
+          perlaHtml = `
+            <div class="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-1">
+              <span class="font-mono text-xs font-bold uppercase text-amber-700 dark:text-amber-300 flex items-center gap-1.5">
+                ${ICONS.diamond}
+                <span>Perla CACES:</span>
+              </span>
+              <div class="clinical-prose text-xs sm:text-sm text-slate-800 dark:text-slate-100 font-medium">${formatClinicalMarkdown(q.perla_caces)}</div>
+              ${q.guia_msp || q.fuente ? `<div class="font-mono text-[11px] text-slate-500 pt-1">Normativa: ${formatClinicalMarkdown(q.guia_msp || q.fuente, { inline: true })}</div>` : ''}
+            </div>
+          `;
+        }
+      }
+
+      const card = document.createElement('div');
+      card.className = 'p-5 sm:p-6 rounded-3xl border border-slate-200 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/40 space-y-4';
+      card.innerHTML = `
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-800 pb-3">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="font-mono font-black text-sm text-slate-900 dark:text-white">PREGUNTA #${idx + 1}</span>
+            <span class="px-2.5 py-0.5 rounded-lg bg-sky-500/15 text-sky-700 dark:text-sky-300 font-mono text-xs font-bold">${q.especialidad || 'Medicina'}</span>
+            ${q.subtema ? `<span class="text-xs text-slate-500 font-medium">• ${formatClinicalMarkdown(q.subtema, { inline: true })}</span>` : ''}
+          </div>
+          ${statusBadgeHtml}
+        </div>
+
+        <div class="clinical-prose text-sm sm:text-base text-slate-800 dark:text-slate-100 leading-relaxed">
+          ${formatClinicalMarkdown(q.enunciado)}
+        </div>
+
+        <div class="p-3.5 rounded-xl bg-white dark:bg-slate-900 border-l-4 border-emerald-500 font-bold text-sm sm:text-base text-slate-900 dark:text-white">
+          ${formatClinicalMarkdown(q.pregunta || '¿Cuál es la conducta diagnóstica o terapéutica de elección?', { inline: true })}
+        </div>
+
+        <div class="grid grid-cols-1 gap-2">
+          ${optionsHtml}
+        </div>
+
+        ${wrongExplanationHtml}
+        ${officialJustificationHtml}
+        ${perlaHtml}
+      `;
+
+      listContainer.appendChild(card);
+    });
+  }
+
+  /**
+   * Limpia etiquetas HTML y Markdown para texto plano en exportación PDF directa
+   */
+  cleanPlainTextForPDF(raw) {
+    if (!raw) return '';
+    return String(raw)
+      .replace(/```(?:markdown|md|json)?/gi, '')
+      .replace(/\*\*([\s\S]+?)\*\*/g, '$1')
+      .replace(/__([\s\S]+?)__/g, '$1')
+      .replace(/\*([^\*\n]+)\*/g, '$1')
+      .replace(/`([^`]+)`/g, '$1')
+      .replace(/<[^>]+>/g, '')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  /**
+   * Generador binario PDF 1.4 nativo de respaldo (sin depender de window.print ni de CDN)
+   */
+  downloadBinaryPdfFallback(filename, textBlocks) {
+    const toWinAnsi = (str) => {
+      return String(str || '')
+        .replace(/[\u2018\u2019]/g, "'")
+        .replace(/[\u201C\u201D]/g, '"')
+        .replace(/[\u2013\u2014]/g, '-')
+        .replace(/\u2022/g, '-')
+        .replace(/[^\x20-\x7E\xA0-\xFF]/g, '');
+    };
+    const escPdf = (s) => toWinAnsi(s).replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+
+    const wrapLine = (text, maxChars = 90) => {
+      const words = String(text || '').split(/\s+/);
+      const lines = [];
+      let cur = '';
+      words.forEach(w => {
+        if (!cur) cur = w;
+        else if ((cur + ' ' + w).length <= maxChars) cur += ' ' + w;
+        else {
+          lines.push(cur);
+          cur = w;
+        }
+      });
+      if (cur) lines.push(cur);
+      return lines.length ? lines : [''];
+    };
+
+    const allLines = [];
+    textBlocks.forEach(b => {
+      const wrapped = wrapLine(b.text, b.bold ? 84 : 92);
+      wrapped.forEach(line => {
+        allLines.push({ text: line, bold: Boolean(b.bold), gapAfter: 0 });
+      });
+      if (b.gapAfter) {
+        allLines.push({ text: '', bold: false, gapAfter: b.gapAfter });
+      }
+    });
+
+    const linesPerPage = 48;
+    const pages = [];
+    for (let i = 0; i < allLines.length; i += linesPerPage) {
+      pages.push(allLines.slice(i, i + linesPerPage));
+    }
+    if (pages.length === 0) pages.push([{ text: 'Sin contenido', bold: false }]);
+
+    const objects = [];
+    const addObj = (body) => {
+      objects.push(body);
+      return objects.length;
+    };
+
+    const fontRegularId = addObj('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>');
+    const fontBoldId = addObj('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>');
+
+    const pageIds = [];
+    const contentIds = [];
+
+    pages.forEach((pLines, pIdx) => {
+      let y = 790;
+      const cmds = ['BT'];
+      pLines.forEach(item => {
+        if (!item.text) {
+          y -= (item.gapAfter || 8);
+          return;
+        }
+        cmds.push(`/${item.bold ? 'F2' : 'F1'} ${item.bold ? 10.5 : 9.5} Tf`);
+        cmds.push(`1 0 0 1 42 ${y} Tm (${escPdf(item.text)}) Tj`);
+        y -= 14;
+      });
+      cmds.push(`/F1 8.5 Tf 1 0 0 1 42 28 Tm (Pagina ${pIdx + 1} de ${pages.length} - EL HPTA CACES) Tj`);
+      cmds.push('ET');
+      const stream = cmds.join('\n');
+      const cId = addObj(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
+      contentIds.push(cId);
+    });
+
+    const pagesRootPlaceholderIndex = objects.length;
+    objects.push('');
+    const pagesRootId = pagesRootPlaceholderIndex + 1;
+
+    contentIds.forEach(cId => {
+      const pId = addObj(`<< /Type /Page /Parent ${pagesRootId} 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 ${fontRegularId} 0 R /F2 ${fontBoldId} 0 R >> >> /Contents ${cId} 0 R >>`);
+      pageIds.push(pId);
+    });
+
+    objects[pagesRootPlaceholderIndex] = `<< /Type /Pages /Kids [${pageIds.map(id => `${id} 0 R`).join(' ')}] /Count ${pageIds.length} >>`;
+    const catalogId = addObj(`<< /Type /Catalog /Pages ${pagesRootId} 0 R >>`);
+
+    let pdf = '%PDF-1.4\n';
+    const offsets = [0];
+    objects.forEach((body, idx) => {
+      offsets.push(pdf.length);
+      pdf += `${idx + 1} 0 obj\n${body}\nendobj\n`;
+    });
+
+    const xrefOffset = pdf.length;
+    pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+    for (let i = 1; i <= objects.length; i++) {
+      pdf += `${String(offsets[i]).padStart(10, '0')} 00000 n \n`;
+    }
+    pdf += `trailer\n<< /Size ${objects.length + 1} /Root ${catalogId} 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+
+    const blob = new Blob([pdf], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  }
+
+  /**
+   * Genera y descarga un archivo .PDF real directamente sin usar window.print()
+   */
+  downloadExamReviewPDF(summary) {
+    const questions = summary.preguntasSesion || this.engine.sessionQuestions || [];
+    const userAnswers = summary.respuestasUsuario || this.engine.userAnswers || {};
+
+    if (questions.length === 0) {
+      alert("No hay preguntas en la sesión para exportar.");
+      return;
+    }
+
+    const clean = (txt) => this.cleanPlainTextForPDF(txt);
+    const filename = `Revision_CACES_${summary.porcentaje || 0}pct_${Date.now().toString().slice(-5)}.pdf`;
+
+    const JsPDFClass = window.jspdf?.jsPDF;
+    if (!JsPDFClass) {
+      // Respaldo binario directo si no cargó el CDN de jsPDF
+      const blocks = [
+        { text: `EL HPTA CACES - REVISION DE EXAMEN (${summary.modo || 'Simulador'})`, bold: true },
+        { text: `Fecha: ${clean(summary.fechaTexto || summary.fecha || '')} | Calificacion: ${summary.porcentaje}% (${summary.puntajeCaces} / 1000 pts) | Aciertos: ${summary.puntuacion}/${summary.total}`, bold: true, gapAfter: 8 }
+      ];
+      questions.forEach((q, idx) => {
+        const userAns = userAnswers[q.id] || null;
+        const isCorrect = userAns === q.correcta;
+        const isUnanswered = !userAns;
+        const statusLabel = isCorrect
+          ? `CORRECTA (Clave ${q.correcta})`
+          : isUnanswered
+            ? `SIN RESPONDER (Clave ${q.correcta})`
+            : `INCORRECTA (Elegiste ${userAns} - Clave ${q.correcta})`;
+
+        blocks.push({ text: `PREGUNTA #${idx + 1} [${clean(q.especialidad || 'Medicina')} - ${clean(q.subtema || 'General')}] - ${statusLabel}`, bold: true });
+        blocks.push({ text: `Caso: ${clean(q.enunciado)}` });
+        blocks.push({ text: `Pregunta: ${clean(q.pregunta || '¿Cuál es la conducta de elección?')}`, bold: true });
+        (Array.isArray(q.opciones) ? q.opciones : []).forEach(o => {
+          const tag = o.id === q.correcta ? ' [CLAVE OFICIAL]' : (o.id === userAns ? ' [TU RESPUESTA]' : '');
+          blocks.push({ text: `  ${o.id}) ${clean(o.texto || o.text || '')}${tag}`, bold: o.id === q.correcta });
+        });
+        if (isUnanswered) {
+          const perlaTxt = clean(q.perla_caces || q.por_que_es || q.justificacion || '');
+          if (perlaTxt) blocks.push({ text: `Perla CACES: ${perlaTxt}`, bold: true, gapAfter: 8 });
+        } else {
+          const breakdown = q.desglose_opciones || q.distractores || {};
+          if (!isCorrect && userAns) {
+            const whyNot = clean(breakdown[userAns] || q.por_que_es || q.justificacion || '');
+            if (whyNot) blocks.push({ text: `Por que ${userAns} es incorrecta: ${whyNot}` });
+          }
+          const fundTxt = clean(q.por_que_es || q.justificacion || '');
+          if (fundTxt) blocks.push({ text: `Fundamento Clave ${q.correcta}: ${fundTxt}` });
+          if (q.perla_caces) blocks.push({ text: `Perla CACES: ${clean(q.perla_caces)}`, bold: true });
+          blocks.push({ text: '', gapAfter: 8 });
+        }
+      });
+      this.downloadBinaryPdfFallback(filename, blocks);
+      return;
+    }
+
+    const doc = new JsPDFClass({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 14;
+    const contentWidth = pageWidth - margin * 2;
+    let y = 16;
+
+    const ensureSpace = (neededMm = 16) => {
+      if (y + neededMm > pageHeight - 16) {
+        doc.addPage();
+        y = 16;
+      }
+    };
+
+    const writeWrapped = (text, { fontSize = 9.5, style = 'normal', color = [15, 23, 42], indent = 0, lineHeight = 4.6 } = {}) => {
+      const str = clean(text);
+      if (!str) return;
+      doc.setFont('helvetica', style);
+      doc.setFontSize(fontSize);
+      doc.setTextColor(color[0], color[1], color[2]);
+      const lines = doc.splitTextToSize(str, contentWidth - indent);
+      lines.forEach(line => {
+        ensureSpace(lineHeight + 2);
+        doc.text(line, margin + indent, y);
+        y += lineHeight;
+      });
+    };
+
+    // Cabecera del PDF
+    doc.setFillColor(15, 23, 42);
+    doc.roundedRect(margin, y - 4, contentWidth, 24, 3, 3, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(13);
+    doc.setTextColor(255, 255, 255);
+    doc.text('EL HPTA CACES — INFORME Y REVISION DE PREGUNTAS', margin + 5, y + 4);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.setTextColor(16, 185, 129);
+    doc.text(
+      clean(`Modalidad: ${summary.modo || 'Simulador'}  |  Fecha: ${summary.fechaTexto || summary.fecha || ''}`),
+      margin + 5,
+      y + 10.5
+    );
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(255, 255, 255);
+    doc.text(
+      clean(`Calificacion: ${summary.porcentaje}% (${summary.puntajeCaces} / 1000 PTS)  |  Aciertos: ${summary.puntuacion}/${summary.total}  |  Incorrectas: ${summary.incorrectas}  |  Sin responder: ${summary.sinResponder}`),
+      margin + 5,
+      y + 16.5
+    );
+    y += 27;
+
+    questions.forEach((q, idx) => {
+      ensureSpace(32);
+
+      const userAns = userAnswers[q.id] || null;
+      const isCorrect = userAns === q.correcta;
+      const isUnanswered = !userAns;
+      const breakdown = q.desglose_opciones || q.distractores || {};
+      const opts = Array.isArray(q.opciones) ? q.opciones : [];
+
+      // Encabezado de la pregunta
+      if (isCorrect) {
+        doc.setFillColor(236, 253, 245);
+        doc.setDrawColor(16, 185, 129);
+      } else if (isUnanswered) {
+        doc.setFillColor(254, 243, 199);
+        doc.setDrawColor(245, 158, 11);
+      } else {
+        doc.setFillColor(255, 241, 242);
+        doc.setDrawColor(244, 63, 94);
+      }
+      doc.roundedRect(margin, y - 3.5, contentWidth, 8, 1.5, 1.5, 'FD');
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9);
+      doc.setTextColor(15, 23, 42);
+      const headerLeft = clean(`PREGUNTA #${idx + 1}  •  ${q.especialidad || 'Medicina'} (${q.subtema || 'General'})`);
+      doc.text(headerLeft.substring(0, 72), margin + 3, y + 1.5);
+
+      const statusRight = isCorrect
+        ? `CORRECTA (Clave ${q.correcta})`
+        : isUnanswered
+          ? `SIN RESPONDER (Clave ${q.correcta})`
+          : `INCORRECTA (Marcaste ${userAns} | Clave ${q.correcta})`;
+
+      if (isCorrect) doc.setTextColor(4, 120, 87);
+      else if (isUnanswered) doc.setTextColor(180, 83, 9);
+      else doc.setTextColor(190, 18, 60);
+      doc.text(clean(statusRight), pageWidth - margin - 3, y + 1.5, { align: 'right' });
+      y += 9;
+
+      // Enunciado y pregunta
+      writeWrapped(`Caso Clinico: ${clean(q.enunciado)}`, { fontSize: 9.2, style: 'normal', color: [30, 41, 59] });
+      y += 1;
+      writeWrapped(clean(q.pregunta || '¿Cuál es la conducta diagnóstica o terapéutica de elección?'), { fontSize: 9.5, style: 'bold', color: [15, 23, 42] });
+      y += 1.5;
+
+      // Opciones
+      opts.forEach(o => {
+        const isKey = o.id === q.correcta;
+        const isChosen = o.id === userAns;
+        const suffix = isKey ? '  [CLAVE OFICIAL]' : (isChosen && !isKey ? '  [TU RESPUESTA]' : '');
+        const optColor = isKey
+          ? [4, 120, 87]
+          : (isChosen && !isKey ? [190, 18, 60] : [51, 65, 85]);
+        writeWrapped(`${o.id}) ${clean(o.texto || o.text || '')}${suffix}`, {
+          fontSize: 9,
+          style: isKey || isChosen ? 'bold' : 'normal',
+          color: optColor,
+          indent: 3,
+          lineHeight: 4.3
+        });
+      });
+      y += 1.5;
+
+      if (isUnanswered) {
+        // Si la pregunta está sin responder: mostrar únicamente la Perla CACES y nada más
+        const perlaOnly = clean(q.perla_caces || q.por_que_es || q.justificacion || 'Revisa este tema en la Guía de Práctica Clínica del MSP Ecuador.');
+        writeWrapped(`PERLA CACES: ${perlaOnly}`, {
+          fontSize: 9,
+          style: 'bold',
+          color: [146, 64, 14],
+          indent: 2,
+          lineHeight: 4.4
+        });
+      } else {
+        if (!isCorrect && userAns) {
+          const whyNot = clean(breakdown[userAns] || q.por_que_es || q.justificacion || '');
+          if (whyNot) {
+            writeWrapped(`Por que la opcion ${userAns} no es correcta: ${whyNot}`, {
+              fontSize: 8.8,
+              style: 'normal',
+              color: [159, 18, 57],
+              indent: 2,
+              lineHeight: 4.3
+            });
+            y += 1;
+          }
+        }
+
+        const fundText = clean(q.por_que_es || q.justificacion || '');
+        if (fundText) {
+          writeWrapped(`Fundamento Clinico (Clave ${q.correcta}): ${fundText}`, {
+            fontSize: 8.8,
+            style: 'normal',
+            color: [6, 95, 70],
+            indent: 2,
+            lineHeight: 4.3
+          });
+          y += 1;
+        }
+
+        if (q.perla_caces) {
+          writeWrapped(`PERLA CACES: ${clean(q.perla_caces)}`, {
+            fontSize: 8.8,
+            style: 'bold',
+            color: [146, 64, 14],
+            indent: 2,
+            lineHeight: 4.3
+          });
+        }
+      }
+
+      y += 4;
+      doc.setDrawColor(226, 232, 240);
+      doc.line(margin, y - 2, pageWidth - margin, y - 2);
+      y += 3;
+    });
+
+    const totalPages = doc.internal.getNumberOfPages();
+    for (let p = 1; p <= totalPages; p++) {
+      doc.setPage(p);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(100, 116, 139);
+      doc.text(`EL HPTA CACES — Pagina ${p} de ${totalPages}`, pageWidth / 2, pageHeight - 8, { align: 'center' });
+    }
+
+    doc.save(filename);
+  }
+
+  // =========================================================================
+  // LA MORGUE (PREGUNTAS COMPLETAS, OPCIONES, OPCIÓN ERRÓNEA Y PERLA CACES)
+  // =========================================================================
+  bindErrorControls() {
+    document.getElementById('btn-clear-errors')?.addEventListener('click', () => {
+      if (confirm("¿Vaciar La Morgue de errores?")) {
+        Storage.clearErrors();
+        this.renderErrorsList();
+      }
+    });
+  }
+
+  renderErrorsList() {
+    const container = document.getElementById('errors-list-container');
+    const badgeCount = document.getElementById('badge-error-count');
+    if (!container) return;
+
+    const errorBank = Storage.getErrorBank();
+    const allQ = this.engine.allQuestions || [];
+    const errorIds = Object.keys(errorBank).filter(id => !errorBank[id].dominada);
+
+    if (badgeCount) badgeCount.textContent = `${errorIds.length} pendientes`;
+
+    if (errorIds.length === 0) {
+      container.innerHTML = `
+        <div class="bto-card text-center py-14 bg-white dark:bg-bto-panel rounded-3xl p-8">
+          <div class="w-14 h-14 mx-auto mb-3 rounded-2xl bg-emerald-500/15 text-emerald-500 flex items-center justify-center">
+            ${ICONS.check}
+          </div>
+          <div class="font-display font-bold text-2xl">La Morgue está vacía</div>
+          <p class="text-sm sm:text-base text-slate-500 max-w-md mx-auto mt-2">No tienes preguntas falladas pendientes. Realiza un simulacro o entra a la Guardia Arcade para ponerte a prueba.</p>
+        </div>
+      `;
+      document.getElementById('btn-study-errors')?.classList.add('hidden');
+      return;
+    }
+
+    document.getElementById('btn-study-errors')?.classList.remove('hidden');
+    container.innerHTML = '';
+
+    // Buscar también la última opción errónea en el historial de simulacros si no estaba registrada aún
+    const history = Storage.getExamHistory();
+
+    errorIds.forEach((id, idx) => {
+      const q = allQ.find(item => item.id === id);
+      if (!q) return;
+      const stats = errorBank[id] || {};
+      let wrongOptId = stats.ultima_opcion_erronea || null;
+
+      if (!wrongOptId) {
+        for (const h of history) {
+          const ans = h.respuestasUsuario?.[id];
+          if (ans && ans !== q.correcta) {
+            wrongOptId = ans;
+            break;
+          }
+        }
+      }
+
+      const opts = Array.isArray(q.opciones) ? q.opciones : [];
+      const breakdown = q.desglose_opciones || q.distractores || {};
+
+      const optionsHtml = opts.map(opt => {
+        const isCorrectOpt = opt.id === q.correcta;
+        const isWrongChosen = wrongOptId && opt.id === wrongOptId;
+        const optText = formatClinicalMarkdown(opt.texto || opt.text || '', { inline: true });
+
+        let boxStyle = 'border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/60 text-slate-700 dark:text-slate-300';
+        let badgeStyle = 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400';
+        let tagHtml = '';
+
+        if (isCorrectOpt) {
+          boxStyle = 'border-emerald-500 bg-emerald-500/15 text-slate-900 dark:text-white font-semibold';
+          badgeStyle = 'bg-emerald-500 text-slate-950';
+          tagHtml = `<span class="ml-2 px-2 py-0.5 rounded bg-emerald-500 text-slate-950 font-mono text-[10px] font-bold uppercase">Clave Correcta</span>`;
+        } else if (isWrongChosen) {
+          boxStyle = 'border-rose-500 bg-rose-500/15 text-slate-900 dark:text-white font-semibold';
+          badgeStyle = 'bg-rose-500 text-white';
+          tagHtml = `<span class="ml-2 px-2 py-0.5 rounded bg-rose-500 text-white font-mono text-[10px] font-bold uppercase">Tu Opción Errónea</span>`;
+        }
+
+        return `
+          <div class="p-3.5 rounded-xl border ${boxStyle} flex items-start gap-3 text-xs sm:text-sm">
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded-lg font-mono font-bold shrink-0 ${badgeStyle}">${opt.id}</span>
+            <div class="flex-1 leading-relaxed">${optText} ${tagHtml}</div>
+          </div>
+        `;
+      }).join('');
+
+      const chosenWrongObj = wrongOptId ? opts.find(o => o.id === wrongOptId) : null;
+      const chosenWrongText = chosenWrongObj ? formatClinicalMarkdown(chosenWrongObj.texto || chosenWrongObj.text || '', { inline: true }) : '';
+      const whyWrongExplanation = (wrongOptId && breakdown[wrongOptId])
+        ? breakdown[wrongOptId]
+        : `Esta opción constituye un distractor clínico y no corresponde a la conducta de primera línea. Revisa el fundamento oficial de la clave ${q.correcta}.`;
+
+      const card = document.createElement('div');
+      card.className = 'bto-card p-6 sm:p-7 rounded-3xl bg-white dark:bg-bto-panel space-y-4';
+      card.innerHTML = `
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-800 pb-3">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="font-mono font-black text-sm text-rose-500">CASO #${idx + 1}</span>
+            <span class="px-2.5 py-1 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 font-mono text-xs font-bold">${q.especialidad} // ${formatClinicalMarkdown(q.subtema || 'CACES', { inline: true })}</span>
+          </div>
+          <div class="flex items-center gap-2 font-mono text-xs">
+            <span class="px-2.5 py-1 rounded-lg bg-rose-500/15 text-rose-500 font-bold">Fallos: ${stats.fallos || 1}</span>
+            <button type="button" class="btn-master-error px-3 py-1 rounded-lg bg-emerald-500 text-slate-950 font-bold hover:bg-emerald-400 transition-colors">Dar de Alta (+10 XP)</button>
+          </div>
+        </div>
+
+        <!-- Enunciado Completo -->
+        <div class="clinical-prose text-sm sm:text-base text-slate-800 dark:text-slate-100 leading-relaxed">
+          ${formatClinicalMarkdown(q.enunciado)}
+        </div>
+
+        <!-- Pregunta Completa -->
+        <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900 border-l-4 border-rose-500 font-bold text-sm sm:text-base text-slate-900 dark:text-white">
+          ${formatClinicalMarkdown(q.pregunta || '¿Cuál es la conducta diagnóstica o terapéutica de elección?', { inline: true })}
+        </div>
+
+        <!-- Opciones de Respuesta Completas -->
+        <div class="grid grid-cols-1 gap-2">
+          ${optionsHtml}
+        </div>
+
+        <!-- Explicación de por qué la opción errónea escogida no es correcta -->
+        <div class="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 space-y-1.5">
+          <span class="font-mono text-xs font-bold uppercase text-rose-600 dark:text-rose-400 flex items-center gap-1.5">
+            ${ICONS.cross}
+            <span>${wrongOptId ? `Por qué tu opción escogida (${wrongOptId}) no es correcta:` : 'Análisis del Error Clínico:'}</span>
+          </span>
+          ${chosenWrongText ? `<div class="text-xs font-semibold text-slate-600 dark:text-slate-300 italic">"${chosenWrongText}"</div>` : ''}
+          <div class="clinical-prose text-xs sm:text-sm text-slate-800 dark:text-slate-200 leading-relaxed">${formatClinicalMarkdown(whyWrongExplanation)}</div>
+        </div>
+
+        <!-- Fundamento de la Respuesta Correcta -->
+        <div class="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 space-y-1">
+          <span class="font-mono text-xs font-bold uppercase text-emerald-600 dark:text-emerald-400 block">CLAVE OFICIAL [${q.correcta}] — Fundamento Clínico:</span>
+          <div class="clinical-prose text-xs sm:text-sm text-slate-700 dark:text-slate-300 leading-relaxed">${formatClinicalMarkdown(q.justificacion || q.por_que_es || '')}</div>
+        </div>
+
+        <!-- Perla CACES -->
+        ${q.perla_caces ? `
+        <div class="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-1">
+          <span class="font-mono text-xs font-bold uppercase text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+            ${ICONS.diamond}
+            <span>Perla CACES de Alto Rendimiento:</span>
+          </span>
+          <div class="clinical-prose text-xs sm:text-sm text-slate-800 dark:text-slate-100 font-medium">${formatClinicalMarkdown(q.perla_caces)}</div>
+          ${q.guia_msp || q.fuente ? `<div class="font-mono text-[11px] text-slate-500 pt-1">Normativa: ${formatClinicalMarkdown(q.guia_msp || q.fuente, { inline: true })}</div>` : ''}
+        </div>` : ''}
+      `;
+
+      card.querySelector('.btn-master-error').addEventListener('click', () => {
+        this.arcade.playTone('correct');
+        this.arcade.addXP(10, true);
+        Storage.markErrorMastered(id);
+        this.renderErrorsList();
+      });
+
+      container.appendChild(card);
+    });
+
+    const btnStudyErrors = document.getElementById('btn-study-errors');
+    if (btnStudyErrors) {
+      btnStudyErrors.onclick = () => {
+        this.startSessionWrapper({ mode: 'errors', count: 50, onlyErrors: true });
+      };
+    }
+  }
+
+  // =========================================================================
+  // IMPORTADOR PDF / JSON Y CONFIGURACIÓN NUBE
+  // =========================================================================
   bindPDFImporter() {
     const fileInput = document.getElementById('pdf-file-input');
     const dropZone = document.getElementById('pdf-drop-zone');
@@ -1591,83 +2589,9 @@ class AppController {
     }
   }
 
-  bindErrorControls() {
-    document.getElementById('btn-clear-errors')?.addEventListener('click', () => {
-      if (confirm("¿Vaciar La Morgue de errores?")) {
-        Storage.clearErrors();
-        this.renderErrorsList();
-      }
-    });
-  }
-
-  renderErrorsList() {
-    const container = document.getElementById('errors-list-container');
-    const badgeCount = document.getElementById('badge-error-count');
-    if (!container) return;
-
-    const errorBank = Storage.getErrorBank();
-    const allQ = this.engine.allQuestions;
-    const errorIds = Object.keys(errorBank).filter(id => !errorBank[id].dominada);
-
-    if (badgeCount) badgeCount.textContent = `${errorIds.length} pendientes`;
-
-    if (errorIds.length === 0) {
-      container.innerHTML = `
-        <div class="bto-card text-center py-14 bg-white dark:bg-bto-panel rounded-3xl p-8">
-          <div class="w-14 h-14 mx-auto mb-3 rounded-2xl bg-emerald-500/15 text-emerald-500 flex items-center justify-center">
-            ${ICONS.check}
-          </div>
-          <div class="font-display font-bold text-2xl">La Morgue está vacía</div>
-          <p class="text-sm sm:text-base text-slate-500 max-w-md mx-auto mt-2">No tienes reactivos fallados pendientes. Realiza un simulacro o entra a la Guardia Arcade para ponerte a prueba.</p>
-        </div>
-      `;
-      document.getElementById('btn-study-errors')?.classList.add('hidden');
-      return;
-    }
-
-    document.getElementById('btn-study-errors')?.classList.remove('hidden');
-    container.innerHTML = '';
-
-    errorIds.forEach(id => {
-      const q = allQ.find(item => item.id === id);
-      if (!q) return;
-      const stats = errorBank[id];
-
-      const card = document.createElement('div');
-      card.className = 'bto-card p-6 sm:p-7 rounded-3xl bg-white dark:bg-bto-panel space-y-4';
-      card.innerHTML = `
-        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-800 pb-3">
-          <span class="font-mono font-bold text-sm text-rose-500">${q.especialidad} // ${formatClinicalMarkdown(q.subtema || 'CACES', { inline: true })}</span>
-          <div class="flex items-center gap-3 font-mono text-xs sm:text-sm">
-            <span class="px-3 py-1 rounded-lg bg-rose-500/15 text-rose-500 font-bold">Fallos: ${stats.fallos}</span>
-            <button class="btn-master-error px-3.5 py-1 rounded-lg bg-emerald-500 text-slate-950 font-bold hover:bg-emerald-400 transition-colors">Dar de Alta (+10 XP)</button>
-          </div>
-        </div>
-        <div class="clinical-prose text-base sm:text-lg text-slate-800 dark:text-slate-100 font-medium">${formatClinicalMarkdown(q.enunciado)}</div>
-        <div class="p-4 sm:p-5 rounded-2xl bg-slate-50 dark:bg-slate-900 border-l-4 border-emerald-500 space-y-1.5">
-          <span class="font-mono text-xs sm:text-sm font-bold text-emerald-600 dark:text-emerald-400 block">CLAVE OFICIAL [${q.correcta}]:</span>
-          <div class="clinical-prose text-sm sm:text-base text-slate-700 dark:text-slate-300">${formatClinicalMarkdown(q.justificacion || q.por_que_es || '')}</div>
-        </div>
-      `;
-
-      card.querySelector('.btn-master-error').addEventListener('click', () => {
-        this.arcade.playTone('correct');
-        this.arcade.addXP(10, true);
-        Storage.markErrorMastered(id);
-        this.renderErrorsList();
-      });
-
-      container.appendChild(card);
-    });
-
-    const btnStudyErrors = document.getElementById('btn-study-errors');
-    if (btnStudyErrors) {
-      btnStudyErrors.onclick = () => {
-        this.startSessionWrapper({ mode: 'errors', count: 50, onlyErrors: true });
-      };
-    }
-  }
-
+  // =========================================================================
+  // FLASHCARDS, CALCULADORAS, TUTOR IA, TEMARIO Y EXPLORADOR
+  // =========================================================================
   async initFlashcards() {
     this.bindFlashcardsControls();
     const source = document.getElementById('fc-source-select')?.value || 'all';
@@ -2168,7 +3092,7 @@ class AppController {
 
     const allQuestions = await Storage.getAllQuestions();
     if (!allQuestions || allQuestions.length === 0) {
-      container.innerHTML = `<div class="col-span-full p-10 text-center text-base text-slate-500">No hay reactivos cargados en el banco.</div>`;
+      container.innerHTML = `<div class="col-span-full p-10 text-center text-base text-slate-500">No hay preguntas cargadas en el banco.</div>`;
       return;
     }
 
@@ -2382,7 +3306,7 @@ class AppController {
     const allQuestions = this.engine.allQuestions || [];
     const totalCount = allQuestions.length;
     const statTotal = document.getElementById('exp-stat-total');
-    if (statTotal) statTotal.textContent = `${totalCount} Reactivos`;
+    if (statTotal) statTotal.textContent = `${totalCount} Preguntas`;
 
     if (totalCount === 0) {
       container.innerHTML = `<div class="p-12 text-center text-slate-500 font-medium">Banco en 0 preguntas.</div>`;
@@ -2455,7 +3379,7 @@ class AppController {
     if (filtered.length === 0) {
       container.innerHTML = `
         <div class="bto-card text-center py-12 bg-white dark:bg-bto-panel rounded-3xl p-6">
-          <div class="font-display font-bold text-xl">Sin reactivos encontrados</div>
+          <div class="font-display font-bold text-xl">Sin preguntas encontradas</div>
           <p class="text-sm text-slate-500 mt-1">Prueba con otros términos de búsqueda o selecciona "Todas" en especialidades.</p>
         </div>
       `;
@@ -2532,7 +3456,7 @@ class AppController {
             </button>
             <button type="button" class="btn-exp-train bto-btn px-4 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs uppercase border-transparent flex items-center gap-1.5">
               ${ICONS.target}
-              <span>Entrenar Reactivo</span>
+              <span>Entrenar Pregunta</span>
             </button>
           </div>
         </div>
@@ -2555,7 +3479,7 @@ class AppController {
   exportStudyPDF() {
     const allQuestions = this.engine.allQuestions || [];
     if (allQuestions.length === 0) {
-      alert("No hay reactivos cargados para exportar.");
+      alert("No hay preguntas cargadas para exportar.");
       return;
     }
 
@@ -2564,67 +3488,109 @@ class AppController {
       listToExport = allQuestions.filter(q => q.especialidad === this.expSpecialty);
     }
     const exportBatch = listToExport.slice(0, 50);
+    const clean = (txt) => this.cleanPlainTextForPDF(txt);
+    const filename = `Cuaderno_CACES_${(this.expSpecialty || 'Todas').replace(/\s+/g, '_')}.pdf`;
 
-    const printWin = window.open('', '_blank');
-    if (!printWin) {
-      alert("Permite las ventanas emergentes en tu navegador para generar el PDF de estudio.");
+    const JsPDFClass = window.jspdf?.jsPDF;
+    if (!JsPDFClass) {
+      const blocks = [
+        { text: `CACES MedPrep - Cuaderno de Estudio (${this.expSpecialty || 'Todas'})`, bold: true },
+        { text: `${exportBatch.length} Preguntas de Alto Rendimiento`, bold: true, gapAfter: 8 }
+      ];
+      exportBatch.forEach((q, idx) => {
+        blocks.push({ text: `PREGUNTA #${idx + 1} [${clean(q.especialidad)} - ${clean(q.subtema || 'General')}]`, bold: true });
+        blocks.push({ text: `Caso: ${clean(q.enunciado)}` });
+        blocks.push({ text: `Pregunta: ${clean(q.pregunta || '¿Cuál es la conducta de elección?')}`, bold: true });
+        (q.opciones || []).forEach(o => {
+          const isKey = o.id === q.correcta;
+          blocks.push({ text: `  ${o.id}) ${clean(o.texto || o.text || '')}${isKey ? ' [CLAVE OFICIAL]' : ''}`, bold: isKey });
+        });
+        if (q.perla_caces) blocks.push({ text: `Perla CACES: ${clean(q.perla_caces)}`, bold: true });
+        blocks.push({ text: '', gapAfter: 8 });
+      });
+      this.downloadBinaryPdfFallback(filename, blocks);
       return;
     }
 
-    const itemsHtml = exportBatch.map((q, idx) => {
-      const opts = (q.opciones || []).map(o => {
+    const doc = new JsPDFClass({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 14;
+    const contentWidth = pageWidth - margin * 2;
+    let y = 16;
+
+    const ensureSpace = (neededMm = 16) => {
+      if (y + neededMm > pageHeight - 16) {
+        doc.addPage();
+        y = 16;
+      }
+    };
+
+    const writeWrapped = (text, { fontSize = 9.5, style = 'normal', color = [15, 23, 42], indent = 0, lineHeight = 4.6 } = {}) => {
+      const str = clean(text);
+      if (!str) return;
+      doc.setFont('helvetica', style);
+      doc.setFontSize(fontSize);
+      doc.setTextColor(color[0], color[1], color[2]);
+      const lines = doc.splitTextToSize(str, contentWidth - indent);
+      lines.forEach(line => {
+        ensureSpace(lineHeight + 2);
+        doc.text(line, margin + indent, y);
+        y += lineHeight;
+      });
+    };
+
+    doc.setFillColor(15, 23, 42);
+    doc.roundedRect(margin, y - 4, contentWidth, 20, 3, 3, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(13);
+    doc.setTextColor(255, 255, 255);
+    doc.text('EL HPTA CACES — CUADERNO DE PREGUNTAS Y PERLAS', margin + 5, y + 4);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(16, 185, 129);
+    doc.text(clean(`Especialidad: ${this.expSpecialty || 'Todas'}  •  ${exportBatch.length} Preguntas`), margin + 5, y + 11);
+    y += 23;
+
+    exportBatch.forEach((q, idx) => {
+      ensureSpace(28);
+      writeWrapped(`PREGUNTA #${idx + 1}  •  ${clean(q.especialidad)} (${clean(q.subtema || 'General')})`, {
+        fontSize: 9.5,
+        style: 'bold',
+        color: [4, 120, 87]
+      });
+      y += 1;
+      writeWrapped(`Caso Clinico: ${clean(q.enunciado)}`, { fontSize: 9.2, style: 'normal', color: [30, 41, 59] });
+      y += 1;
+      writeWrapped(clean(q.pregunta || '¿Cuál es la conducta de elección?'), { fontSize: 9.4, style: 'bold', color: [15, 23, 42] });
+      y += 1;
+      (q.opciones || []).forEach(o => {
         const isKey = o.id === q.correcta;
-        return `<li style="margin-bottom: 4px; ${isKey ? 'font-weight: bold; color: #047857;' : ''}"><strong>${o.id})</strong> ${o.texto || o.text || ''} ${isKey ? ' [CLAVE OFICIAL]' : ''}</li>`;
-      }).join('');
+        writeWrapped(`${o.id}) ${clean(o.texto || o.text || '')}${isKey ? '  [CLAVE OFICIAL]' : ''}`, {
+          fontSize: 9,
+          style: isKey ? 'bold' : 'normal',
+          color: isKey ? [4, 120, 87] : [51, 65, 85],
+          indent: 3,
+          lineHeight: 4.3
+        });
+      });
+      if (q.perla_caces) {
+        y += 1;
+        writeWrapped(`PERLA CACES: ${clean(q.perla_caces)}`, {
+          fontSize: 8.8,
+          style: 'bold',
+          color: [146, 64, 14],
+          indent: 2,
+          lineHeight: 4.3
+        });
+      }
+      y += 4;
+      doc.setDrawColor(226, 232, 240);
+      doc.line(margin, y - 2, pageWidth - margin, y - 2);
+      y += 3;
+    });
 
-      return `
-        <div style="page-break-inside: avoid; border-bottom: 1px solid #e2e8f0; padding: 16px 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-          <div style="display: flex; justify-content: space-between; font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: bold; margin-bottom: 6px;">
-            <span>ÍTEM #${idx + 1} // ${q.especialidad} — ${q.subtema || 'General'}</span>
-            <span>ID: ${q.id}</span>
-          </div>
-          <p style="font-size: 13px; line-height: 1.5; color: #1e293b; margin: 0 0 8px 0;"><strong>Caso Clínico:</strong> ${q.enunciado}</p>
-          <p style="font-size: 13px; font-weight: bold; color: #0f172a; margin: 0 0 8px 0;">Pregunta: ${q.pregunta || '¿Cuál es la conducta de elección?'}</p>
-          <ul style="list-style: none; padding-left: 0; font-size: 12px; margin: 0 0 10px 0;">
-            ${opts}
-          </ul>
-          ${q.perla_caces ? `<div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 8px 12px; border-radius: 6px; font-size: 12px; color: #78350f; margin-bottom: 6px;"><strong>PERLA CACES:</strong> ${q.perla_caces}</div>` : ''}
-          <div style="font-size: 11px; color: #64748b;"><strong>Normativa MSP:</strong> ${q.guia_msp || q.fuente || 'GPC del MSP Ecuador'}</div>
-        </div>
-      `;
-    }).join('');
-
-    printWin.document.write(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Cuaderno de Repaso Clínico CACES - ${this.expSpecialty || 'Todas'}</title>
-        <style>
-          @page { margin: 15mm; }
-          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #0f172a; margin: 0; padding: 20px; }
-          h1 { font-size: 20px; margin-bottom: 4px; color: #0f172a; }
-          .subtitle { font-size: 12px; color: #64748b; margin-bottom: 20px; border-bottom: 2px solid #0f172a; padding-bottom: 10px; }
-          @media print { button { display: none; } }
-        </style>
-      </head>
-      <body>
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-          <div>
-            <h1>CACES MedPrep - Cuaderno de Guardia y Perlas Clínicas</h1>
-            <div class="subtitle">Especialidad: ${this.expSpecialty || 'Todas'} • ${exportBatch.length} Reactivos de Alto Rendimiento • Desarrollado por Jhojann Demera</div>
-          </div>
-          <button onclick="window.print()" style="padding: 10px 20px; background: #059669; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer;">Imprimir / Guardar como PDF</button>
-        </div>
-        ${itemsHtml}
-        <script>
-          window.onload = function() {
-            setTimeout(function() { window.print(); }, 400);
-          };
-        </script>
-      </body>
-      </html>
-    `);
-    printWin.document.close();
+    doc.save(filename);
   }
 }
 
