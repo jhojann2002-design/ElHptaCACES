@@ -456,11 +456,19 @@ export class ExamEngine {
     if (isFirstClickOnQuestion) {
       this.firstAttemptByQuestion[currentQ.id] = optionId;
       const isCorrectFirst = optionId === currentQ.correcta;
-      Storage.registerAnswer(currentQ.id, isCorrectFirst, isCorrectFirst ? null : optionId);
+      Storage.registerAnswer(currentQ.id, isCorrectFirst, isCorrectFirst ? null : optionId, {
+        specialty: currentQ.especialidad || 'Medicina Interna',
+        mode: this.mode,
+        isFirstAttempt: true
+      });
     } else if (this.mode === 'caces' && prevSelected !== optionId) {
       // En modo simulador cerrado el usuario puede cambiar su respuesta antes de entregar
       const isCorrectNow = optionId === currentQ.correcta;
-      Storage.registerAnswer(currentQ.id, isCorrectNow, isCorrectNow ? null : optionId);
+      Storage.registerAnswer(currentQ.id, isCorrectNow, isCorrectNow ? null : optionId, {
+        specialty: currentQ.especialidad || 'Medicina Interna',
+        mode: 'caces',
+        isFirstAttempt: false
+      });
     } else if (this.mode !== 'caces') {
       // En modo tutor / La Morgue: una vez respondida, la pregunta queda bloqueada
       return { isFirstClickOnQuestion: false, isFirstClickCorrect: false, changed: false };
@@ -607,6 +615,7 @@ export class ExamEngine {
     const summary = {
       modo: this.mode === 'caces' ? 'Simulacro Oficial CACES' : (this.mode === 'errors' ? 'Repaso La Morgue' : 'Práctica Modo Tutor'),
       modeKey: this.mode,
+      realtimeTutorCounted: this.mode !== 'caces',
       puntuacion: correct,
       total: total,
       incorrectas: incorrect,

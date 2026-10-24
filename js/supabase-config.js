@@ -1,8 +1,9 @@
 /**
- * Configuración de Supabase para el Simulador CACES
+ * Configuración de Supabase para El Hpta CACES
  * Puedes configurar tus credenciales aquí o directamente desde la interfaz web en la pestaña "Configuración Nube".
  */
 export const SupabaseConfig = {
+  APP_NAME: "El Hpta CACES",
   // Credenciales por defecto del proyecto Supabase
   DEFAULT_URL: "https://xumusduhkbpcsvuwhjuk.supabase.co",
   DEFAULT_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh1bXVzZHVoa2JwY3N2dXdoanVrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIyODYyNTUsImV4cCI6MjEwNzg2MjI1NX0.EiftbKlrgFyAvOttUKhzNSZhNZJEx6cF9_qiRMosZuI",

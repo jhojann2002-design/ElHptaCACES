@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>EL HPTA CACES | Suite Clínica & Simulador EHEP Ecuador</title>
+  <title>El Hpta CACES</title>
   
   <!-- PWA & Mobile Web App Meta -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#10b981">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="CACES MedPrep">
+  <meta name="apple-mobile-web-app-title" content="El Hpta CACES">
   
   <!-- Restauración instantánea de tema -->
   <script>
@@ -224,6 +224,128 @@
 <body class="bg-bto-paper dark:bg-bto-dark text-slate-900 dark:text-slate-100 min-h-full flex flex-col font-sans antialiased selection:bg-emerald-500 selection:text-white transition-colors duration-200 overflow-x-hidden">
 
   <!-- ===================================================================== -->
+  <!-- PÁGINA DE INICIO OBLIGATORIA (PORTADA + ACCESO + TOP 5 RANKED)        -->
+  <!-- ===================================================================== -->
+  <section id="landing-auth-gate" class="fixed inset-0 z-[70] bg-bto-paper dark:bg-bto-dark overflow-y-auto flex flex-col justify-between p-4 sm:p-6 lg:p-10 transition-opacity duration-300">
+    <script>
+      if (localStorage.getItem('caces_user_profile')) {
+        document.getElementById('landing-auth-gate')?.classList.add('hidden');
+      }
+    </script>
+
+    <!-- Barra superior de la página de inicio -->
+    <div class="max-w-6xl w-full mx-auto flex items-center justify-between gap-3 pb-4 border-b border-slate-200/70 dark:border-slate-800/80">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white shadow-lg shadow-emerald-500/25">
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+        </div>
+        <div>
+          <span class="font-display font-extrabold text-lg sm:text-xl tracking-tight text-slate-900 dark:text-white block leading-none">
+            EL HPTA <span class="text-emerald-600 dark:text-emerald-400">CACES</span>
+          </span>
+          <span class="font-mono text-[11px] text-slate-500 dark:text-slate-400">SIMULADOR MÉDICO & RANKING NACIONAL EHEP</span>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 font-mono text-xs font-bold">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+          2,453 Casos Clínicos PRO
+        </span>
+      </div>
+    </div>
+
+    <!-- Contenido Central: Acceso Obligatorio + Vista Previa Top 5 Ranked -->
+    <div class="max-w-6xl w-full mx-auto my-auto py-6 sm:py-10 grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
+      
+      <!-- Columna Izquierda (7 cols): Hero + Inicio de Sesión Obligatorio -->
+      <div class="lg:col-span-7 space-y-6">
+        <div class="space-y-3">
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 font-mono text-xs font-bold uppercase tracking-wider">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+            <span>Temporada Competitiva EHEP Activa</span>
+          </div>
+          <h1 class="font-display font-extrabold text-3xl sm:text-5xl tracking-tight text-slate-900 dark:text-white leading-[1.1]">
+            Bienvenido a <span class="text-transparent bg-clip-text bg-gradient-to-r from-emerald-500 to-cyan-400">El Hpta CACES</span>
+          </h1>
+          <p class="text-sm sm:text-base text-slate-600 dark:text-slate-300 leading-relaxed max-w-2xl">
+            Inicia sesión para desbloquear el panel clínico, guardar tu progreso automáticamente en la nube y competir en el <strong>Ranking Nacional</strong> por más preguntas correctas, mejor promedio en simulacros y mayor racha.
+          </p>
+        </div>
+
+        <!-- Tarjeta de Inicio de Sesión Obligatorio -->
+        <div class="bto-card p-6 sm:p-8 rounded-3xl bg-white dark:bg-bto-panel space-y-5 border-2 border-emerald-500/30 shadow-2xl">
+          <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-4">
+            <div>
+              <h2 class="font-display font-bold text-xl text-slate-900 dark:text-white">Iniciar Sesión para Entrar</h2>
+              <p class="text-xs font-mono text-slate-500 dark:text-slate-400 mt-0.5">Conecta tu cuenta oficial de Google para aparecer con tu foto en el Ranking</p>
+            </div>
+            <span class="px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-mono text-xs font-bold">GOOGLE AUTH</span>
+          </div>
+
+          <!-- Botón Principal de Google -->
+          <button id="btn-landing-google" type="button" class="w-full py-4 px-5 rounded-2xl bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-900 dark:text-white border-2 border-emerald-500/70 hover:border-emerald-400 font-display font-bold text-base flex items-center justify-center gap-3.5 transition-all shadow-lg shadow-emerald-500/10 hover:shadow-xl cursor-pointer">
+            <svg class="w-5 h-5 shrink-0" viewBox="0 0 24 24">
+              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+            </svg>
+            <span>Iniciar Sesión con Google</span>
+          </button>
+
+          <div id="landing-auth-feedback" class="hidden p-3 rounded-xl text-xs font-mono font-bold"></div>
+        </div>
+      </div>
+
+      <!-- Columna Derecha (5 cols): Vista Previa en Vivo del TOP 5 RANKED -->
+      <div class="lg:col-span-5">
+        <div class="bto-card p-6 sm:p-7 rounded-3xl bg-white dark:bg-bto-panel space-y-4 border border-amber-500/30">
+          <div class="flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2.5">
+              <div class="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-500 flex items-center justify-center shrink-0">
+                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+              </div>
+              <div>
+                <h3 class="font-display font-extrabold text-lg text-slate-900 dark:text-white leading-tight">Top 5 Ranked EHEP</h3>
+                <p class="font-mono text-xs text-slate-500 dark:text-slate-400">100% en vivo con cuentas reales de Google</p>
+              </div>
+            </div>
+            <span class="px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-500 font-mono text-[11px] font-bold">TOP 5</span>
+          </div>
+
+          <!-- Pestañas del Preview Ranked en Portada -->
+          <div class="grid grid-cols-3 gap-1.5 p-1 rounded-2xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+            <button type="button" data-landing-rank-tab="aciertos" class="landing-rank-tab-btn py-2 px-2 rounded-xl font-display font-bold text-xs bg-emerald-500 text-slate-950 shadow-sm transition-all">
+              Top Aciertos
+            </button>
+            <button type="button" data-landing-rank-tab="promedio" class="landing-rank-tab-btn py-2 px-2 rounded-xl font-display font-bold text-xs text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-all">
+              Mejor Promedio
+            </button>
+            <button type="button" data-landing-rank-tab="racha" class="landing-rank-tab-btn py-2 px-2 rounded-xl font-display font-bold text-xs text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-all">
+              Mayor Racha
+            </button>
+          </div>
+
+          <!-- Lista Top 5 en Portada -->
+          <div id="landing-top5-list" class="space-y-2.5 min-h-[290px]"></div>
+
+          <div class="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-slate-600 dark:text-slate-300 flex items-center gap-2.5">
+            <svg class="w-4 h-4 text-emerald-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            <span>Cada pregunta correcta en simulacros o tutor suma a tu cuenta y te impulsa en el Ranking.</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Footer de la página de inicio -->
+    <div class="max-w-6xl w-full mx-auto pt-4 border-t border-slate-200/70 dark:border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-xs font-mono text-slate-400">
+      <span>EL HPTA CACES • PLATAFORMA DE ENTRENAMIENTO MÉDICO</span>
+      <span>CREADO POR JHOJANN DEMERA</span>
+    </div>
+  </section>
+
+  <!-- ===================================================================== -->
   <!-- MENÚ LATERAL IZQUIERDO (DRAWER HAMBURGUESA: ESCALAS, STATS, RANGOS)   -->
   <!-- ===================================================================== -->
   <div id="left-drawer-backdrop" class="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm hidden opacity-0 transition-opacity duration-200"></div>
@@ -251,7 +373,7 @@
       <div class="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 space-y-3">
         <div class="flex items-center gap-3">
           <div id="drawer-user-avatar-wrap" class="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-500 flex items-center justify-center shrink-0 overflow-hidden">
-            <img id="drawer-user-avatar" src="" alt="Avatar" class="w-full h-full object-cover hidden">
+            <img id="drawer-user-avatar" src="" referrerpolicy="no-referrer" alt="Avatar" class="w-full h-full object-cover hidden">
             <svg id="drawer-user-default-icon" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
           </div>
           <div class="min-w-0 flex-1">
@@ -280,6 +402,20 @@
           </div>
         </button>
 
+        <!-- Juegos CACES -->
+        <button data-tab-target="arcade" class="drawer-nav-item w-full p-3.5 rounded-2xl text-left flex items-center gap-3.5 hover:bg-slate-100 dark:hover:bg-slate-800/70 transition-colors group">
+          <div class="w-10 h-10 rounded-xl bg-rose-500/15 text-rose-500 border border-rose-500/30 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 12h4m-2-2v4m7-1h.01M18 11h.01"/></svg>
+          </div>
+          <div>
+            <div class="font-display font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
+              <span>Juegos CACES</span>
+              <span class="px-1.5 py-0.5 rounded bg-rose-500 text-white font-mono text-[10px] font-black">PLAY</span>
+            </div>
+            <div class="text-xs text-slate-500 dark:text-slate-400">Puente de Cristal 3D y Ahorcado MSP</div>
+          </div>
+        </button>
+
         <!-- Escalas MSP -->
         <button data-tab-target="calculadoras" class="drawer-nav-item w-full p-3.5 rounded-2xl text-left flex items-center gap-3.5 hover:bg-slate-100 dark:hover:bg-slate-800/70 transition-colors group">
           <div class="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
@@ -288,6 +424,20 @@
           <div>
             <div class="font-display font-bold text-sm text-slate-900 dark:text-white">Escalas Clínicas MSP</div>
             <div class="text-xs text-slate-500 dark:text-slate-400">Score MAMÁ, AIEPI, Alvarado, CURB-65</div>
+          </div>
+        </button>
+
+        <!-- Ranked Competitivo (Top EHEP) -->
+        <button data-tab-target="ranked" class="drawer-nav-item w-full p-3.5 rounded-2xl text-left flex items-center gap-3.5 hover:bg-slate-100 dark:hover:bg-slate-800/70 transition-colors group">
+          <div class="w-10 h-10 rounded-xl bg-amber-500/15 text-amber-500 border border-amber-500/30 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+          </div>
+          <div>
+            <div class="font-display font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
+              <span>Rankeds (Top EHEP)</span>
+              <span class="px-1.5 py-0.5 rounded bg-amber-500 text-slate-950 font-mono text-[10px] font-black">TOP</span>
+            </div>
+            <div class="text-xs text-slate-500 dark:text-slate-400">Top Aciertos, Promedio y Mayor Racha</div>
           </div>
         </button>
 
@@ -399,9 +549,21 @@
           </div>
         </div>
 
-        <!-- Derecha: Rango Clínico + Botón Perfil + Sonido + Tema (Ajustado para móviles) -->
+        <!-- Derecha: Botón Ranked + Rango Clínico + Botón Perfil + Sonido + Tema -->
         <div class="flex items-center gap-1 sm:gap-2 shrink-0">
           
+          <!-- Botón Acceso Rápido a JUEGOS -->
+          <button data-tab-target="arcade" type="button" class="bto-btn px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-600 dark:text-rose-400 border border-rose-500/35 text-xs font-display font-bold flex items-center gap-1.5 shrink-0" title="Ir a Juegos CACES (Puente de Cristal y Ahorcado Clínico)">
+            <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 12h4m-2-2v4m7-1h.01M18 11h.01"/></svg>
+            <span>Juegos</span>
+          </button>
+
+          <!-- Botón Acceso Rápido a RANKEDS -->
+          <button data-tab-target="ranked" type="button" class="bto-btn px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-600 dark:text-amber-400 border border-amber-500/35 text-xs font-display font-bold flex items-center gap-1.5 shrink-0" title="Ver Ranking Competitivo (Top Aciertos, Promedio y Racha)">
+            <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+            <span>Ranked</span>
+          </button>
+
           <!-- Badge de Rango Clínico -->
           <button id="user-xp-hud" type="button" class="flex items-center gap-1 sm:gap-2.5 px-2 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-slate-100/90 dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 hover:border-emerald-500/60 transition-colors shrink-0" title="Ver Jerarquía de Rangos Clínicos">
             <div class="flex items-center gap-0.5 font-mono text-[11px] sm:text-sm font-bold text-amber-500">
@@ -418,7 +580,7 @@
           <!-- Botón de Perfil / Iniciar Sesión -->
           <button id="btn-open-auth-modal" type="button" class="bto-btn px-2 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 text-xs font-semibold flex items-center gap-1.5 shrink-0" title="Cuenta y Guardado Automático con Google">
             <span id="auto-sync-dot" class="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-emerald-500 shrink-0"></span>
-            <img id="header-user-avatar" src="" alt="Avatar" class="w-4 h-4 sm:w-5 sm:h-5 rounded-full object-cover hidden shrink-0">
+            <img id="header-user-avatar" src="" referrerpolicy="no-referrer" alt="Avatar" class="w-4 h-4 sm:w-5 sm:h-5 rounded-full object-cover hidden shrink-0">
             <svg id="header-user-default-icon" class="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
             <span id="header-user-label" class="hidden sm:inline max-w-[100px] truncate">Acceder</span>
           </button>
@@ -480,8 +642,8 @@
             <span class="truncate">Morgue</span>
           </button>
           <button data-tab-target="arcade" class="nav-tab-btn px-2 py-2 sm:px-3.5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold border border-transparent text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 flex items-center justify-center gap-1.5 transition-all">
-            <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 12h4m-2-2v4m7-1h.01M18 11h.01"/></svg>
-            <span class="truncate">Arcade</span>
+            <svg class="w-4 h-4 shrink-0 text-rose-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 12h4m-2-2v4m7-1h.01M18 11h.01"/></svg>
+            <span class="truncate">Juegos</span>
           </button>
           <button data-tab-target="estudio" class="hidden"></button>
         </nav>
@@ -521,7 +683,7 @@
                 </h2>
                 
                 <p class="text-slate-600 dark:text-slate-300 text-base sm:text-lg max-w-2xl leading-relaxed">
-                  Simulación estricta bajo presión de tiempo real. Escoge cuántas preguntas vas a resolver y si deseas evaluar todas las áreas ponderadas como en el examen oficial o una especialidad específica.
+                  Simulación bajo presión de tiempo real. Elige la cantidad de preguntas y evalúa todas las áreas ponderadas o una especialidad específica.
                 </p>
               </div>
 
@@ -576,7 +738,7 @@
                 </h2>
                 
                 <p class="text-slate-600 dark:text-slate-300 text-base sm:text-lg max-w-2xl leading-relaxed">
-                  Entrena con retroalimentación clínica instantánea, perlas del MSP, explicación puntual si eliges un distractor, Flashcards, Temario, La Morgue y Guardia Arcade.
+                  Entrena con retroalimentación clínica al instante, perlas del MSP, explicación por opción, Flashcards, Temario, La Morgue y Juegos.
                 </p>
               </div>
 
@@ -618,8 +780,8 @@
           <!-- Columna Lateral (4 cols) -->
           <div class="lg:col-span-4 flex flex-col gap-6">
             
-            <!-- Parámetros Oficiales -->
-            <div class="bto-card rounded-3xl bg-slate-900 text-white p-7 space-y-5 flex-1 flex flex-col justify-between border border-slate-800">
+            <!-- Parámetros Oficiales (Solo Modo Simulador) -->
+            <div id="setup-side-ehep-params" class="bto-card rounded-3xl bg-slate-900 text-white p-7 space-y-5 flex-1 flex flex-col justify-between border border-slate-800">
               <div class="flex items-center justify-between border-b border-slate-800 pb-3.5">
                 <span class="font-mono text-xs sm:text-sm uppercase tracking-wider text-slate-400">Parámetros EHEP</span>
                 <span class="font-mono text-xs sm:text-sm text-emerald-400 font-bold">ESTÁNDAR CACES</span>
@@ -650,18 +812,36 @@
               </div>
               <h3 class="font-display font-bold text-lg text-slate-900 dark:text-white">Examen Cerrado Sin Pistas</h3>
               <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
-                En Modo Simulador las respuestas y perlas permanecen ocultas hasta finalizar el intento. Si recargas la página, tu intento y cronómetro se conservan intactos.
+                En Modo Simulador las respuestas y perlas permanecen ocultas hasta finalizar el intento.
               </p>
             </div>
 
-            <!-- Tarjeta Lateral Modo Estudio: Acceso Destacado al Arcade -->
-            <div id="setup-arcade-promo-card" onclick="document.querySelector('[data-tab-target=arcade]').click()" class="hidden bto-card rounded-3xl bg-gradient-to-br from-slate-900 via-slate-900 to-rose-950 text-white p-6 cursor-pointer hover:border-rose-500/50 transition-all group">
-              <div class="flex items-center justify-between">
-                <span class="font-mono text-xs uppercase tracking-wider px-2.5 py-1 rounded-md bg-rose-500/20 text-rose-300 border border-rose-500/30 font-semibold">Entrenamiento Visual</span>
-                <svg class="w-6 h-6 text-rose-400 group-hover:scale-110 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 12h4m-2-2v4m7-1h.01M18 11h.01"/></svg>
+            <!-- Tarjeta Lateral Modo Estudio: Acceso Destacado a Juegos -->
+            <div id="setup-arcade-promo-card" onclick="document.querySelector('[data-tab-target=arcade]').click()" class="hidden bto-card rounded-3xl bg-gradient-to-br from-slate-900 via-slate-900 to-rose-950 text-white p-6 sm:p-7 cursor-pointer hover:border-rose-500/60 transition-all group flex-1 flex flex-col justify-between border border-slate-800">
+              <div class="space-y-4">
+                <div class="flex items-center justify-between">
+                  <span class="font-mono text-xs uppercase tracking-wider px-3 py-1 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 font-bold">Juegos Interactivos</span>
+                  <img src="assets/logo-hpta-caces.png" alt="El Hpta CACES" class="w-10 h-10 rounded-xl object-cover bg-white p-0.5 shadow-md">
+                </div>
+                <div>
+                  <h3 class="font-display font-extrabold text-2xl text-white">Juegos CACES</h3>
+                  <p class="text-sm text-slate-300 mt-1 leading-relaxed">Repasa casos clínicos y perlas del MSP jugando al Puente de Cristal 3D o al Ahorcado Clínico.</p>
+                </div>
+                <div class="grid grid-cols-2 gap-3 pt-1">
+                  <div class="rounded-2xl bg-slate-800/90 border border-slate-700/80 p-2.5 flex flex-col items-center text-center gap-2 group-hover:border-rose-500/40 transition-colors">
+                    <img src="assets/juego-puente-cristal.png" alt="Puente de Cristal" class="w-full h-24 object-cover rounded-xl">
+                    <span class="font-display font-bold text-xs text-white leading-tight">Puente de Cristal 3D</span>
+                  </div>
+                  <div class="rounded-2xl bg-slate-800/90 border border-slate-700/80 p-2.5 flex flex-col items-center text-center gap-2 group-hover:border-emerald-500/40 transition-colors">
+                    <img src="assets/juego-ahorcado.png" alt="Ahorcado Clínico" class="w-full h-24 object-contain rounded-xl bg-emerald-100/90 p-1.5">
+                    <span class="font-display font-bold text-xs text-white leading-tight">Ahorcado Clínico MSP</span>
+                  </div>
+                </div>
               </div>
-              <h3 class="font-display font-bold text-xl mt-3 text-white">Guardia Arcade</h3>
-              <p class="text-sm text-slate-300 mt-1 leading-relaxed">Entrena reflejos diagnósticos, estabiliza pacientes en UCI y domina fármacos bajo presión.</p>
+              <div class="pt-4 mt-4 border-t border-slate-800/80 flex items-center justify-between text-xs font-mono font-bold text-rose-300 group-hover:text-rose-200">
+                <span>ENTRAR A JUEGOS</span>
+                <span class="px-2.5 py-1 rounded-lg bg-rose-500 text-white group-hover:translate-x-0.5 transition-transform">JUGAR →</span>
+              </div>
             </div>
 
           </div>
@@ -1011,46 +1191,66 @@
     </section>
 
     <!-- =================================================================== -->
-    <!-- TAB 2: GUARDIA ARCADE (SOLO EN MODO ESTUDIO)                        -->
+    <!-- TAB 2: JUEGOS (PUENTE DE CRISTAL SQUID GAME & AHORCADO)             -->
     <!-- =================================================================== -->
     <section id="tab-arcade" class="tab-content hidden">
       <div class="max-w-6xl mx-auto py-2 space-y-6">
         
-        <div class="bto-card rounded-3xl bg-slate-900 text-white p-7 sm:p-9 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 border border-slate-800">
-          <div class="space-y-2.5">
-            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 font-mono text-xs font-bold uppercase">
-              <span>CENTRO DE ENTRENAMIENTO INTERACTIVO</span>
+        <div class="bto-card rounded-3xl bg-slate-900 text-white p-6 sm:p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 border border-slate-800">
+          <div class="flex items-start sm:items-center gap-4 sm:gap-5">
+            <img src="assets/logo-hpta-caces.png" alt="El Hpta CACES" class="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover bg-white p-1 shrink-0 shadow-lg">
+            <div class="space-y-1.5">
+              <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 font-mono text-xs font-bold uppercase">
+                <span>○ △ □ • JUEGOS INTERACTIVOS CACES</span>
+              </div>
+              <h2 class="font-display text-2xl sm:text-4xl font-extrabold tracking-tight">
+                JUEGOS // <span class="text-emerald-400">EL HPTA CACES</span>
+              </h2>
+              <p class="text-sm sm:text-base text-slate-300 max-w-2xl leading-relaxed">
+                Selecciona un juego: cruza el <strong>Puente de Cristal (#456)</strong> o descubre el término oculto en el <strong>Ahorcado Clínico MSP</strong>.
+              </p>
             </div>
-            <h2 class="font-display text-3xl sm:text-4xl font-extrabold tracking-tight">
-              GUARDIA ARCADE // <span class="text-emerald-400">REFLEJOS CLÍNICOS</span>
-            </h2>
-            <p class="text-sm sm:text-base text-slate-300 max-w-2xl leading-relaxed">
-              Entrena decisiones críticas bajo presión, estabilización hemodinámica y asociación farmacológica rápida.
-            </p>
           </div>
 
-          <div id="arcade-rank-card-trigger" class="p-5 rounded-2xl bg-slate-800/90 border border-slate-700 hover:border-emerald-500/50 cursor-pointer transition-colors min-w-[260px] space-y-2.5" title="Haz clic para ver los 5 Rangos Clínicos">
-            <div class="flex items-center justify-between text-xs sm:text-sm font-mono">
-              <span class="text-slate-400">RANGO (VER NIVELES):</span>
-              <span id="arcade-rank-badge" class="text-emerald-400 font-bold underline">Interno Rotativo</span>
+          <div id="arcade-rank-card-trigger" class="p-4 sm:p-5 rounded-2xl bg-slate-800/90 border border-slate-700 hover:border-emerald-500/50 transition-colors min-w-[260px] space-y-2.5">
+            <div class="flex items-center justify-between text-xs font-mono border-b border-slate-700/80 pb-2">
+              <span class="text-slate-400 uppercase">RÉCORDS EN VIDRIOS:</span>
+              <span class="text-emerald-400 font-bold">PUENTE #456</span>
             </div>
-            <div class="w-full bg-slate-950 h-3 rounded-full overflow-hidden">
-              <div id="arcade-xp-bar" class="bg-gradient-to-r from-emerald-500 to-cyan-400 h-full transition-all duration-300" style="width: 20%"></div>
-            </div>
-            <div class="flex items-center justify-between text-xs sm:text-sm font-mono text-slate-300">
-              <span>XP Total: <b id="arcade-xp-total" class="text-white">0</b></span>
-              <span>Récord: <b id="arcade-high-score" class="text-sky-400">0</b></span>
+            <div class="grid grid-cols-2 gap-3 pt-0.5 font-mono">
+              <div class="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800 text-center">
+                <span class="text-[10px] text-slate-400 uppercase block">Racha Máxima</span>
+                <b id="arcade-best-bridge-streak" class="text-amber-400 text-sm sm:text-base font-black">0 vidrios</b>
+              </div>
+              <div class="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800 text-center">
+                <span class="text-[10px] text-slate-400 uppercase block">Puentes Logrados</span>
+                <b id="arcade-total-bridges" class="text-emerald-400 text-sm sm:text-base font-black">0</b>
+              </div>
             </div>
           </div>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
-          <button type="button" data-game-mode="blitz" class="arcade-mode-btn bto-card text-left p-6 rounded-3xl bg-white dark:bg-bto-panel border-2 border-emerald-500 ring-2 ring-emerald-500/20 space-y-2.5">
-            <h3 class="font-display font-bold text-xl">1. Cardio-Shock ECG</h3>
+        <!-- Selector de los 2 Juegos Oficiales -->
+        <div id="arcade-mode-selector-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <button type="button" data-game-mode="bridge" class="arcade-mode-btn bto-card text-left p-5 rounded-3xl bg-white dark:bg-bto-panel border-2 border-rose-500 ring-2 ring-rose-500/20 flex items-center gap-4">
+            <img src="assets/juego-puente-cristal.png" alt="El Puente de Cristal" class="w-24 h-28 object-cover rounded-2xl shrink-0">
+            <div>
+              <h3 class="font-display font-bold text-xl">1. El Puente de Cristal (#456)</h3>
+            </div>
+          </button>
+          <button type="button" data-game-mode="hangman" class="arcade-mode-btn bto-card text-left p-5 rounded-3xl bg-white dark:bg-bto-panel flex items-center gap-4">
+            <img src="assets/juego-ahorcado.png" alt="Ahorcado Clínico MSP" class="w-24 h-28 object-contain rounded-2xl bg-emerald-100 p-2 shrink-0">
+            <div>
+              <h3 class="font-display font-bold text-xl">2. Ahorcado Clínico MSP</h3>
+            </div>
           </button>
         </div>
 
-        <div id="arcade-stage" class="bto-card rounded-3xl bg-white dark:bg-bto-panel p-6 sm:p-10 min-h-[460px] flex flex-col justify-between"></div>
+        <!-- Escenario Principal del Juego Activo -->
+        <div id="arcade-stage" class="bto-card rounded-3xl bg-white dark:bg-bto-panel p-5 sm:p-8 min-h-[500px] flex flex-col justify-between"></div>
+
+        <!-- Ranking Top de Jugadores en Arcade (Con cuentas y fotos reales de Google) -->
+        <div id="arcade-leaderboard-panel" class="bto-card rounded-3xl bg-white dark:bg-bto-panel p-6 sm:p-7 space-y-4 border border-amber-500/30"></div>
 
       </div>
     </section>
@@ -1072,7 +1272,7 @@
               <span>MAPA TÁCTICO EHEP • 7 COMPONENTES</span>
             </div>
             <h2 class="font-display text-3xl sm:text-4xl font-extrabold tracking-tight">
-              Estudio Quirúrgico por Subtemas y Guías MSP
+              Subtemas y Guías MSP
             </h2>
             <p class="text-sm sm:text-base text-slate-300 leading-relaxed">
               Filtra cualquier patología, escala o fármaco, revisa sus perlas de alto rendimiento y entrena bloques específicos.
@@ -1691,6 +1891,67 @@
       </div>
     </section>
 
+    <!-- =================================================================== -->
+    <!-- TAB 11: RANKEDS COMPETITIVOS (TOP ACIERTOS, PROMEDIO Y RACHA)       -->
+    <!-- =================================================================== -->
+    <section id="tab-ranked" class="tab-content hidden">
+      <div class="max-w-5xl mx-auto py-2 sm:py-4 space-y-6">
+        
+        <!-- Cabecera de Rankeds -->
+        <div class="bto-card p-6 sm:p-8 rounded-3xl bg-white dark:bg-bto-panel flex flex-col md:flex-row md:items-center justify-between gap-4 border-2 border-amber-500/30">
+          <div class="space-y-1.5">
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/15 text-amber-500 font-mono text-xs font-bold uppercase">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+              <span>Liga Nacional • El Hpta CACES</span>
+            </div>
+            <h2 class="font-display text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">Rankeds Competitivos EHEP</h2>
+            <p class="text-sm text-slate-500 dark:text-slate-400">Supera a otros médicos respondiendo más preguntas correctas, mejorando tu promedio en simulacros y manteniendo tu racha.</p>
+          </div>
+          <div class="flex flex-wrap items-center gap-2.5 shrink-0">
+            <button id="btn-refresh-ranked" type="button" class="bto-btn px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 text-xs font-mono font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2">
+              <svg class="w-4 h-4 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+              <span>Actualizar Top</span>
+            </button>
+            <button id="btn-ranked-back-study" type="button" class="bto-btn px-4 py-2.5 rounded-xl bg-emerald-500 text-slate-950 font-display font-bold text-xs border-transparent">
+              Ir a Entrenar →
+            </button>
+          </div>
+        </div>
+
+        <!-- Tarjeta de Tu Posición y Meta Motivacional -->
+        <div id="ranked-user-summary-card" class="bto-card p-5 sm:p-6 rounded-3xl bg-gradient-to-r from-emerald-500/10 via-teal-500/5 to-transparent border border-emerald-500/30"></div>
+
+        <!-- Pestañas de Categoría del Ranking -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 p-1.5 rounded-2xl bg-slate-200/70 dark:bg-slate-900/90 border border-slate-300/80 dark:border-slate-800">
+          <button type="button" data-ranked-category="aciertos" class="ranked-cat-btn py-3 px-4 rounded-xl font-display font-bold text-sm flex items-center justify-center gap-2 bg-emerald-500 text-slate-950 shadow-md transition-all">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><polyline points="20 6 9 17 4 12"/></svg>
+            <span>Top Aciertos</span>
+          </button>
+          <button type="button" data-ranked-category="promedio" class="ranked-cat-btn py-3 px-4 rounded-xl font-display font-bold text-sm flex items-center justify-center gap-2 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-all">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+            <span>Mejor Promedio en Simulacros</span>
+          </button>
+          <button type="button" data-ranked-category="racha" class="ranked-cat-btn py-3 px-4 rounded-xl font-display font-bold text-sm flex items-center justify-center gap-2 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-all">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            <span>Mayor Racha</span>
+          </button>
+        </div>
+
+        <!-- Podio Top 3 -->
+        <div id="ranked-podium-container" class="grid grid-cols-1 md:grid-cols-3 gap-4"></div>
+
+        <!-- Tabla Clasificatoria Completa -->
+        <div class="bto-card rounded-3xl bg-white dark:bg-bto-panel overflow-hidden">
+          <div class="p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+            <h3 id="ranked-table-title" class="font-display font-bold text-base sm:text-lg text-slate-900 dark:text-white">Clasificación General — Top Aciertos</h3>
+            <span class="font-mono text-xs text-emerald-500 font-bold">TIEMPO REAL</span>
+          </div>
+          <div id="ranked-table-body" class="divide-y divide-slate-200/70 dark:divide-slate-800/80"></div>
+        </div>
+
+      </div>
+    </section>
+
   </main>
 
   <!-- ===================================================================== -->
@@ -1739,7 +2000,7 @@
           </div>
           <div class="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-center">
             <b class="text-amber-500 text-sm block">+20 a 25 XP</b>
-            <span class="text-slate-600 dark:text-slate-300">Caso en Arcade</span>
+            <span class="text-slate-600 dark:text-slate-300">Caso en Juegos</span>
           </div>
           <div class="p-3 rounded-xl bg-purple-500/10 border border-purple-500/20 text-center">
             <b class="text-purple-500 text-sm block">+100 XP</b>
@@ -1826,7 +2087,7 @@
           <div class="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 space-y-3">
             <div class="flex items-center gap-3">
               <div id="auth-active-avatar-wrap" class="w-12 h-12 rounded-full overflow-hidden bg-emerald-500 text-slate-950 flex items-center justify-center font-bold text-lg shrink-0">
-                <img id="auth-active-avatar-img" src="" alt="Google Avatar" class="w-full h-full object-cover hidden">
+                <img id="auth-active-avatar-img" src="" referrerpolicy="no-referrer" alt="Google Avatar" class="w-full h-full object-cover hidden">
                 <span id="auth-active-avatar-initial">DR</span>
               </div>
               <div class="min-w-0 flex-1">

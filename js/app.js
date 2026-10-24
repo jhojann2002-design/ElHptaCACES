@@ -129,6 +129,8 @@ class AppController {
     this.lastEstudioTab = 'simulacro';
     this.extractedQuestionsPreview = [];
     this.pcSidebarCollapsed = false;
+    this.rankedCategory = 'aciertos'; // 'aciertos' | 'promedio' | 'racha'
+    this.landingRankedCategory = 'aciertos';
 
     // Enlazar autoguardado seguro en la nube cada vez que cambie el XP o la racha
     const origAddXP = this.arcade.addXP.bind(this.arcade);
@@ -149,6 +151,7 @@ class AppController {
     this.bindThemeAndSFXToggle();
     this.bindRanksModal();
     this.bindAuthModal();
+    this.bindLandingAndRanked();
     this.bindSecretAdminAccess();
     this.bindExamControls();
     this.bindKeyboardShortcuts();
@@ -405,18 +408,21 @@ class AppController {
 
     const simPanel = document.getElementById('setup-panel-simulacro');
     const estPanel = document.getElementById('setup-panel-estudio');
+    const sideEhepParams = document.getElementById('setup-side-ehep-params');
     const sideSimInfo = document.getElementById('setup-side-simulacro-info');
     const sideArcadePromo = document.getElementById('setup-arcade-promo-card');
 
     if (this.activeDialMode === 'estudio') {
       simPanel?.classList.add('hidden');
       estPanel?.classList.remove('hidden');
+      sideEhepParams?.classList.add('hidden');
       sideSimInfo?.classList.add('hidden');
       sideArcadePromo?.classList.remove('hidden');
     } else {
       estPanel?.classList.add('hidden');
       simPanel?.classList.remove('hidden');
       sideArcadePromo?.classList.add('hidden');
+      sideEhepParams?.classList.remove('hidden');
       sideSimInfo?.classList.remove('hidden');
     }
 
@@ -525,37 +531,37 @@ class AppController {
       {
         level: 1,
         title: 'Externo de Guardia',
-        range: '0 — 249 XP',
+        range: '0 — 999 XP',
         min: 0,
-        desc: 'Inicio de rotación hospitalaria. Aprendizaje de semiología, triaje y signos vitales básicos.'
+        desc: 'Inicio de preparación anual (~100 aciertos). Bases de semiología, triaje y signos vitales.'
       },
       {
         level: 2,
         title: 'Interno Rotativo',
-        range: '250 — 599 XP',
-        min: 250,
-        desc: 'Primera línea en emergencia y centro de salud. Dominio de Score MAMÁ, AIEPI y esquemas PAI.'
+        range: '1,000 — 3,499 XP',
+        min: 1000,
+        desc: 'Primera línea hospitalaria (~100 a 350 aciertos). Dominio de Score MAMÁ, AIEPI y esquemas PAI.'
       },
       {
         level: 3,
         title: 'Residente R1 de Choque',
-        range: '600 — 1,199 XP',
-        min: 600,
-        desc: 'Manejo resolutivo de Claves Obstétricas (Roja, Azul, Amarilla), abdomen agudo y reanimación.'
+        range: '3,500 — 7,999 XP',
+        min: 3500,
+        desc: 'Mitad del camino (~350 a 800 aciertos). Manejo resolutivo de Claves Obstétricas, trauma y reanimación.'
       },
       {
         level: 4,
         title: 'Jefe de Guardia MSP',
-        range: '1,200 — 2,199 XP',
-        min: 1200,
-        desc: 'Criterio clínico quirúrgico. Descarte inmediato de distractores CACES y dominio de GPC nacionales.'
+        range: '8,000 — 14,999 XP',
+        min: 8000,
+        desc: 'Criterio clínico avanzado (~800 a 1,500 aciertos). Descarte quirúrgico de distractores y dominio de GPC.'
       },
       {
         level: 5,
         title: 'Leyenda del Hpta CACES',
-        range: '2,200+ XP',
-        min: 2200,
-        desc: 'Nivel Catedrático / Especialista Senior. Precisión superior al 85% y habilitación profesional asegurada.'
+        range: '15,000+ XP',
+        min: 15000,
+        desc: 'Maestría total del banco CACES (1,500+ aciertos y simulacros aprobados). Habilitación profesional asegurada.'
       }
     ];
 
@@ -675,8 +681,356 @@ class AppController {
 
     document.getElementById('btn-logout-auth')?.addEventListener('click', () => {
       Storage.logoutUser();
+      document.getElementById('auth-modal')?.classList.add('hidden');
       this.refreshAuthUI();
     });
+  }
+
+  enforceAuthGate() {
+    const profile = Storage.getUserProfile();
+    const landingGate = document.getElementById('landing-auth-gate');
+    if (!landingGate) return;
+
+    if (profile && profile.email) {
+      landingGate.classList.add('hidden');
+      document.body.classList.remove('overflow-hidden');
+    } else {
+      landingGate.classList.remove('hidden');
+      this.renderLandingRankedPreview();
+    }
+  }
+
+  bindLandingAndRanked() {
+    const feedbackEl = document.getElementById('landing-auth-feedback');
+    const showLandingFeedback = (txt, isError = false) => {
+      if (!feedbackEl) return;
+      feedbackEl.classList.remove('hidden');
+      feedbackEl.className = `p-3 rounded-xl text-xs font-mono font-bold ${
+        isError ? 'bg-rose-500/15 text-rose-500' : 'bg-emerald-500/15 text-emerald-500'
+      }`;
+      feedbackEl.textContent = txt;
+    };
+
+    // Botón de Google en la Página de Inicio
+    document.getElementById('btn-landing-google')?.addEventListener('click', async () => {
+      try {
+        showLandingFeedback('Abriendo acceso con Google para El Hpta CACES...', false);
+        const profile = await Storage.loginWithGoogle();
+        if (profile && !profile.inProgress) {
+          this.arcade.xp = parseInt(localStorage.getItem('caces_xp') || '120', 10);
+          this.arcade.highScoreBlitz = parseInt(localStorage.getItem('caces_blitz_high') || '0', 10);
+          this.arcade.updateHUD();
+          feedbackEl?.classList.add('hidden');
+          this.refreshAuthUI();
+          this.arcade.playTone('correct');
+        }
+      } catch (err) {
+        showLandingFeedback(err.message || 'Inicio de sesión cancelado.', true);
+      }
+    });
+
+    // Formulario directo en la Página de Inicio
+    document.getElementById('landing-auth-form')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = document.getElementById('landing-name-input')?.value || '';
+      const email = document.getElementById('landing-email-input')?.value || '';
+      try {
+        showLandingFeedback('Verificando credencial y sincronizando con El Hpta CACES...', false);
+        await Storage.loginOrRegisterUser({ name, email, provider: 'credencial' });
+        this.arcade.xp = parseInt(localStorage.getItem('caces_xp') || '120', 10);
+        this.arcade.highScoreBlitz = parseInt(localStorage.getItem('caces_blitz_high') || '0', 10);
+        this.arcade.updateHUD();
+        feedbackEl?.classList.add('hidden');
+        this.refreshAuthUI();
+        this.arcade.playTone('correct');
+      } catch (err) {
+        showLandingFeedback(err.message || 'Ingresa un nombre y correo válidos.', true);
+      }
+    });
+
+    // Pestañas del Top 5 en la Página de Inicio
+    document.querySelectorAll('[data-landing-rank-tab]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const cat = btn.getAttribute('data-landing-rank-tab') || 'aciertos';
+        this.landingRankedCategory = cat;
+        document.querySelectorAll('[data-landing-rank-tab]').forEach(b => {
+          const isSelected = b.getAttribute('data-landing-rank-tab') === cat;
+          b.className = isSelected
+            ? 'landing-rank-tab-btn py-2 px-2 rounded-xl font-display font-bold text-xs bg-emerald-500 text-slate-950 shadow-sm transition-all'
+            : 'landing-rank-tab-btn py-2 px-2 rounded-xl font-display font-bold text-xs text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-all';
+        });
+        this.renderLandingRankedPreview();
+      });
+    });
+
+    // Pestañas de categoría dentro de la sección #tab-ranked
+    document.querySelectorAll('[data-ranked-category]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const cat = btn.getAttribute('data-ranked-category') || 'aciertos';
+        this.rankedCategory = cat;
+        document.querySelectorAll('[data-ranked-category]').forEach(b => {
+          const isSelected = b.getAttribute('data-ranked-category') === cat;
+          b.className = isSelected
+            ? 'ranked-cat-btn py-3 px-4 rounded-xl font-display font-bold text-sm flex items-center justify-center gap-2 bg-emerald-500 text-slate-950 shadow-md transition-all'
+            : 'ranked-cat-btn py-3 px-4 rounded-xl font-display font-bold text-sm flex items-center justify-center gap-2 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-all';
+        });
+        this.renderRankedLeaderboard();
+      });
+    });
+
+    document.getElementById('btn-refresh-ranked')?.addEventListener('click', () => {
+      this.arcade.playTone('beep');
+      this.renderRankedLeaderboard();
+    });
+
+    document.getElementById('btn-ranked-back-study')?.addEventListener('click', () => {
+      this.switchTab('simulacro');
+    });
+
+    this.renderLandingRankedPreview();
+  }
+
+  sortLeaderboardByCategory(entries, category = 'aciertos') {
+    const list = [...entries];
+    if (category === 'promedio') {
+      return list.sort((a, b) => {
+        if ((b.promedioSimulacros || 0) !== (a.promedioSimulacros || 0)) {
+          return (b.promedioSimulacros || 0) - (a.promedioSimulacros || 0);
+        }
+        return (b.totalCorrectas || 0) - (a.totalCorrectas || 0);
+      });
+    }
+    if (category === 'racha') {
+      return list.sort((a, b) => {
+        if ((b.mejorRacha || 0) !== (a.mejorRacha || 0)) {
+          return (b.mejorRacha || 0) - (a.mejorRacha || 0);
+        }
+        return (b.xp || 0) - (a.xp || 0);
+      });
+    }
+    return list.sort((a, b) => {
+      if ((b.totalCorrectas || 0) !== (a.totalCorrectas || 0)) {
+        return (b.totalCorrectas || 0) - (a.totalCorrectas || 0);
+      }
+      return (b.xp || 0) - (a.xp || 0);
+    });
+  }
+
+  formatCategoryMetric(entry, category = 'aciertos') {
+    if (category === 'promedio') {
+      return {
+        primary: `${entry.promedioSimulacros || 0}%`,
+        secondary: `${entry.puntajeCacesPromedio || 0} pts EHEP`
+      };
+    }
+    if (category === 'racha') {
+      return {
+        primary: `x${entry.mejorRacha || 1} seguidas`,
+        secondary: `${entry.xp || 0} XP acumulados`
+      };
+    }
+    return {
+      primary: `${entry.totalCorrectas || 0} aciertos`,
+      secondary: `${entry.xp || 0} XP • ${entry.rankTitle || 'Externo de Guardia'}`
+    };
+  }
+
+  async renderLandingRankedPreview() {
+    const listEl = document.getElementById('landing-top5-list');
+    if (!listEl) return;
+
+    const allEntries = await Storage.getRankedLeaderboard();
+    const sorted = this.sortLeaderboardByCategory(allEntries, this.landingRankedCategory);
+    const top5 = sorted.slice(0, 5);
+
+    if (top5.length === 0) {
+      listEl.innerHTML = `
+        <div class="p-6 rounded-2xl border border-dashed border-slate-300 dark:border-slate-800 text-center space-y-2">
+          <div class="font-display font-bold text-sm text-slate-900 dark:text-white">Ranking 100% Real en Vivo</div>
+          <p class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+            Inicia sesión con tu cuenta de Google para inaugurar el Top 5 con tu foto y registrar tus aciertos reales.
+          </p>
+        </div>
+      `;
+      return;
+    }
+
+    const badgeColors = [
+      'bg-amber-400 text-slate-950 ring-2 ring-amber-400/40',
+      'bg-slate-300 text-slate-950',
+      'bg-amber-700 text-white',
+      'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300',
+      'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+    ];
+
+    listEl.innerHTML = top5.map((item, idx) => {
+      const metric = this.formatCategoryMetric(item, this.landingRankedCategory);
+      return `
+        <div class="p-3 rounded-2xl border transition-all flex items-center justify-between gap-3 ${
+          idx === 0
+            ? 'bg-amber-500/10 border-amber-500/40'
+            : 'bg-slate-50/90 dark:bg-slate-900/70 border-slate-200/80 dark:border-slate-800'
+        }">
+          <div class="flex items-center gap-3 min-w-0">
+            <div class="w-7 h-7 rounded-lg font-mono font-black text-xs flex items-center justify-center shrink-0 ${badgeColors[idx]}">
+              #${idx + 1}
+            </div>
+            <img src="${item.avatar}" referrerpolicy="no-referrer" alt="" class="w-9 h-9 rounded-full object-cover shrink-0 border border-slate-300 dark:border-slate-700">
+            <div class="min-w-0">
+              <div class="font-display font-bold text-sm text-slate-900 dark:text-white truncate">
+                ${item.name}
+                ${item.isCurrentUser ? '<span class="ml-1.5 px-1.5 py-0.5 rounded bg-emerald-500 text-slate-950 font-mono text-[10px] font-black">TÚ</span>' : ''}
+              </div>
+              <div class="font-mono text-[11px] text-slate-500 dark:text-slate-400 truncate">${item.rankTitle}</div>
+            </div>
+          </div>
+          <div class="text-right shrink-0">
+            <div class="font-mono font-black text-sm text-emerald-600 dark:text-emerald-400">${metric.primary}</div>
+            <div class="font-mono text-[10px] text-slate-400">${metric.secondary}</div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  async renderRankedLeaderboard() {
+    const summaryEl = document.getElementById('ranked-user-summary-card');
+    const podiumEl = document.getElementById('ranked-podium-container');
+    const tableBodyEl = document.getElementById('ranked-table-body');
+    const tableTitleEl = document.getElementById('ranked-table-title');
+    if (!tableBodyEl) return;
+
+    const categoryTitles = {
+      aciertos: 'Clasificación Real — Top Aciertos (Simulador + Modo Tutor)',
+      promedio: 'Clasificación Real — Mejor Promedio General (%)',
+      racha: 'Clasificación Real — Mayor Racha de Aciertos Seguidos'
+    };
+    if (tableTitleEl) {
+      tableTitleEl.textContent = categoryTitles[this.rankedCategory] || categoryTitles.aciertos;
+    }
+
+    const allEntries = await Storage.getRankedLeaderboard();
+    const sorted = this.sortLeaderboardByCategory(allEntries, this.rankedCategory);
+
+    const myIndex = sorted.findIndex(e => e.isCurrentUser);
+    const myEntry = myIndex !== -1 ? sorted[myIndex] : null;
+    const myRankNum = myIndex !== -1 ? myIndex + 1 : sorted.length + 1;
+    const nextRival = myIndex > 0 ? sorted[myIndex - 1] : null;
+
+    if (summaryEl && myEntry) {
+      let motivationHtml = '<span class="text-emerald-500 font-bold">¡Estás en el Puesto #1 del Ranking en vivo! Cada acierto en Modo Tutor o Simulador amplía tu ventaja.</span>';
+      if (nextRival) {
+        if (this.rankedCategory === 'aciertos') {
+          const diff = Math.max(1, (nextRival.totalCorrectas || 0) - (myEntry.totalCorrectas || 0) + 1);
+          motivationHtml = `Te faltan solo <strong>${diff} preguntas correctas</strong> para superar a <strong>${nextRival.name}</strong> y subir al puesto <strong>#${myIndex}</strong>.`;
+        } else if (this.rankedCategory === 'promedio') {
+          const diff = Math.max(1, (nextRival.promedioSimulacros || 0) - (myEntry.promedioSimulacros || 0) + 1);
+          motivationHtml = `Sube tu precisión en <strong>+${diff}%</strong> para superar a <strong>${nextRival.name}</strong> (#${myIndex}).`;
+        } else {
+          const diff = Math.max(1, (nextRival.mejorRacha || 0) - (myEntry.mejorRacha || 0) + 1);
+          motivationHtml = `Logra una racha de <strong>+${diff} aciertos más</strong> para superar a <strong>${nextRival.name}</strong> (#${myIndex}).`;
+        }
+      }
+
+      summaryEl.innerHTML = `
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div class="flex items-center gap-4">
+            <div class="w-14 h-14 rounded-2xl bg-emerald-500 text-slate-950 font-mono font-black text-xl flex flex-col items-center justify-center shrink-0 shadow-lg shadow-emerald-500/25">
+              <span class="text-[10px] uppercase leading-none">TOP</span>
+              <span>#${myRankNum}</span>
+            </div>
+            <img src="${myEntry.avatar}" referrerpolicy="no-referrer" alt="" class="w-12 h-12 rounded-full object-cover border-2 border-emerald-500 shrink-0">
+            <div>
+              <div class="flex items-center gap-2 flex-wrap">
+                <h3 class="font-display font-extrabold text-lg sm:text-xl text-slate-900 dark:text-white">${myEntry.name}</h3>
+                <span class="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-mono text-xs font-bold">${myEntry.rankTitle}</span>
+              </div>
+              <p class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 mt-1">${motivationHtml}</p>
+            </div>
+          </div>
+          <div class="grid grid-cols-3 gap-2.5 sm:gap-4 shrink-0">
+            <div class="p-3 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 text-center">
+              <span class="font-mono text-[10px] uppercase text-slate-400 block">Aciertos</span>
+              <span class="font-mono font-black text-base sm:text-lg text-emerald-500">${myEntry.totalCorrectas}</span>
+            </div>
+            <div class="p-3 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 text-center">
+              <span class="font-mono text-[10px] uppercase text-slate-400 block">Promedio</span>
+              <span class="font-mono font-black text-base sm:text-lg text-sky-500">${myEntry.promedioSimulacros}%</span>
+            </div>
+            <div class="p-3 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 text-center">
+              <span class="font-mono text-[10px] uppercase text-slate-400 block">Mejor Racha</span>
+              <span class="font-mono font-black text-base sm:text-lg text-amber-500">x${myEntry.mejorRacha}</span>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // Renderizar Podio Top 3
+    if (podiumEl) {
+      const top3 = sorted.slice(0, 3);
+      const podiumStyles = [
+        { badge: 'TOP #1 • ORO', border: 'border-amber-400/60 bg-amber-500/10', pill: 'bg-amber-400 text-slate-950' },
+        { badge: 'TOP #2 • PLATA', border: 'border-slate-300/60 dark:border-slate-600 bg-white dark:bg-bto-panel', pill: 'bg-slate-300 text-slate-950' },
+        { badge: 'TOP #3 • BRONCE', border: 'border-amber-700/50 bg-white dark:bg-bto-panel', pill: 'bg-amber-700 text-white' }
+      ];
+      podiumEl.innerHTML = top3.map((item, idx) => {
+        const st = podiumStyles[idx];
+        const metric = this.formatCategoryMetric(item, this.rankedCategory);
+        return `
+          <div class="bto-card p-5 rounded-3xl border-2 ${st.border} flex flex-col justify-between space-y-4">
+            <div class="flex items-center justify-between">
+              <span class="px-2.5 py-1 rounded-lg font-mono text-xs font-black ${st.pill}">${st.badge}</span>
+              ${item.isCurrentUser ? '<span class="px-2 py-0.5 rounded bg-emerald-500 text-slate-950 font-mono text-xs font-black">TÚ</span>' : ''}
+            </div>
+            <div class="flex items-center gap-3.5">
+              <img src="${item.avatar}" referrerpolicy="no-referrer" alt="" class="w-12 h-12 rounded-2xl object-cover border-2 border-emerald-500/40 shrink-0">
+              <div class="min-w-0">
+                <h4 class="font-display font-extrabold text-base sm:text-lg text-slate-900 dark:text-white truncate">${item.name}</h4>
+                <p class="font-mono text-xs text-slate-500 dark:text-slate-400 truncate">${item.rankTitle}</p>
+              </div>
+            </div>
+            <div class="pt-3 border-t border-slate-200/70 dark:border-slate-800 flex items-baseline justify-between">
+              <span class="font-mono font-black text-xl text-emerald-600 dark:text-emerald-400">${metric.primary}</span>
+              <span class="font-mono text-xs text-slate-400">${metric.secondary}</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Renderizar Tabla Completa
+    tableBodyEl.innerHTML = sorted.map((item, idx) => {
+      const metric = this.formatCategoryMetric(item, this.rankedCategory);
+      return `
+        <div class="p-4 sm:px-6 flex items-center justify-between gap-3 transition-colors ${
+          item.isCurrentUser
+            ? 'bg-emerald-500/15 dark:bg-emerald-500/15'
+            : 'hover:bg-slate-50 dark:hover:bg-slate-900/50'
+        }">
+          <div class="flex items-center gap-3.5 min-w-0">
+            <span class="w-8 h-8 rounded-xl font-mono font-black text-xs flex items-center justify-center shrink-0 ${
+              idx === 0 ? 'bg-amber-400 text-slate-950' :
+              idx === 1 ? 'bg-slate-300 text-slate-950' :
+              idx === 2 ? 'bg-amber-700 text-white' :
+              item.isCurrentUser ? 'bg-emerald-500 text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+            }">#${idx + 1}</span>
+            <img src="${item.avatar}" referrerpolicy="no-referrer" alt="" class="w-10 h-10 rounded-full object-cover shrink-0 border border-slate-200 dark:border-slate-700">
+            <div class="min-w-0">
+              <div class="font-display font-bold text-sm sm:text-base text-slate-900 dark:text-white truncate flex items-center gap-2">
+                <span>${item.name}</span>
+                ${item.isCurrentUser ? '<span class="px-2 py-0.5 rounded bg-emerald-500 text-slate-950 font-mono text-[10px] font-black uppercase">Tú</span>' : ''}
+              </div>
+              <div class="font-mono text-xs text-slate-500 dark:text-slate-400 truncate">${item.rankTitle} • ${item.email}</div>
+            </div>
+          </div>
+          <div class="text-right shrink-0">
+            <div class="font-mono font-black text-sm sm:text-base text-emerald-600 dark:text-emerald-400">${metric.primary}</div>
+            <div class="font-mono text-xs text-slate-400">${metric.secondary}</div>
+          </div>
+        </div>
+      `;
+    }).join('');
   }
 
   refreshAuthUI() {
@@ -746,6 +1100,8 @@ class AppController {
       loggedOutView?.classList.remove('hidden');
       loggedInView?.classList.add('hidden');
     }
+
+    this.enforceAuthGate();
   }
 
   // =========================================================================
@@ -888,6 +1244,9 @@ class AppController {
 
   switchTab(tabId, { preserveModuleState = false } = {}) {
     this.currentTab = tabId;
+    if (['temario', 'explorador', 'flashcards', 'errores', 'arcade'].includes(tabId) && this.activeDialMode !== 'estudio') {
+      this.syncDialVisualsOnly('estudio');
+    }
     if (this.activeDialMode === 'estudio' && ['simulacro', 'temario', 'explorador', 'flashcards', 'errores', 'arcade'].includes(tabId)) {
       this.lastEstudioTab = tabId;
     }
@@ -911,7 +1270,9 @@ class AppController {
 
     this.updateStudyNavbarVisibility();
 
-    if (tabId === 'arcade') {
+    if (tabId === 'ranked') {
+      this.renderRankedLeaderboard();
+    } else if (tabId === 'arcade') {
       if (!preserveModuleState || !document.getElementById('arcade-stage')?.innerHTML.trim()) {
         this.arcade.initArcade(this.engine.allQuestions);
       }
@@ -2132,7 +2493,7 @@ class AppController {
             ${ICONS.check}
           </div>
           <div class="font-display font-bold text-2xl">La Morgue está vacía</div>
-          <p class="text-sm sm:text-base text-slate-500 max-w-md mx-auto mt-2">No tienes preguntas falladas pendientes. Realiza un simulacro o entra a la Guardia Arcade para ponerte a prueba.</p>
+          <p class="text-sm sm:text-base text-slate-500 max-w-md mx-auto mt-2">No tienes preguntas falladas pendientes. Realiza un simulacro o entra a la sección de Juegos para ponerte a prueba.</p>
         </div>
       `;
       document.getElementById('btn-study-errors')?.classList.add('hidden');

@@ -233,7 +233,7 @@ class StorageManager {
   }
 
   // =========================================================================
-  // SISTEMA DE PERFIL DE USUARIO Y SINCRONIZACIÓN DE PROGRESO
+  // SISTEMA DE PERFIL DE USUARIO, ACCESO CON GOOGLE ("EL HPTA CACES") Y RANKEDS
   // =========================================================================
   getUserProfile() {
     try {
@@ -244,6 +244,161 @@ class StorageManager {
     }
   }
 
+  getSavedGoogleAccounts() {
+    try {
+      const raw = localStorage.getItem('caces_google_accounts');
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+
+  saveKnownGoogleAccount(account) {
+    if (!account || !account.email) return;
+    try {
+      const list = this.getSavedGoogleAccounts().filter(a => a.email !== account.email);
+      list.unshift({
+        name: account.name,
+        email: account.email,
+        avatar: account.avatar
+      });
+      localStorage.setItem('caces_google_accounts', JSON.stringify(list.slice(0, 5)));
+    } catch (e) {}
+  }
+
+  getRankTitleForXP(xp = 0) {
+    if (xp >= 15000) return 'Leyenda del Hpta CACES';
+    if (xp >= 8000) return 'Jefe de Guardia MSP';
+    if (xp >= 3500) return 'Residente R1 de Choque';
+    if (xp >= 1000) return 'Interno Rotativo';
+    return 'Externo de Guardia';
+  }
+
+  getTutorStats() {
+    try {
+      const raw = localStorage.getItem('caces_tutor_stats');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        return {
+          totalAnswered: Number(parsed.totalAnswered || 0),
+          totalCorrect: Number(parsed.totalCorrect || 0),
+          bySpecialty: parsed.bySpecialty || {}
+        };
+      }
+    } catch (e) {}
+    return { totalAnswered: 0, totalCorrect: 0, bySpecialty: {} };
+  }
+
+  getArcadeStats() {
+    try {
+      const raw = localStorage.getItem('caces_arcade_stats');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const bestStep = Number(parsed.bridgeBestStep || 0);
+        const bestStreak = Math.max(Number(parsed.bridgeBestStreak || 0), bestStep);
+        return {
+          bridgeHighScore: Number(parsed.bridgeHighScore || 0),
+          bridgeBestStep: bestStep,
+          bridgeBestStreak: bestStreak,
+          bridgeWins: Number(parsed.bridgeWins || 0),
+          hangmanHighScore: Number(parsed.hangmanHighScore || 0),
+          hangmanWordsSolved: Number(parsed.hangmanWordsSolved || 0),
+          hangmanBestStreak: Number(parsed.hangmanBestStreak || 0)
+        };
+      }
+    } catch (e) {}
+    return {
+      bridgeHighScore: 0,
+      bridgeBestStep: 0,
+      bridgeBestStreak: 0,
+      bridgeWins: 0,
+      hangmanHighScore: 0,
+      hangmanWordsSolved: 0,
+      hangmanBestStreak: 0
+    };
+  }
+
+  saveArcadeStats(update = {}) {
+    const current = this.getArcadeStats();
+    const nextBestStep = Math.max(current.bridgeBestStep, Number(update.bridgeBestStep || 0));
+    const nextBestStreak = Math.max(current.bridgeBestStreak || 0, Number(update.bridgeBestStreak || 0), nextBestStep);
+    const next = {
+      bridgeHighScore: Math.max(current.bridgeHighScore, Number(update.bridgeHighScore || 0)),
+      bridgeBestStep: nextBestStep,
+      bridgeBestStreak: nextBestStreak,
+      bridgeWins: current.bridgeWins + Number(update.addBridgeWin || 0),
+      hangmanHighScore: Math.max(current.hangmanHighScore, Number(update.hangmanHighScore || 0)),
+      hangmanWordsSolved: current.hangmanWordsSolved + Number(update.addHangmanWord || 0),
+      hangmanBestStreak: Math.max(current.hangmanBestStreak, Number(update.hangmanBestStreak || 0))
+    };
+    localStorage.setItem('caces_arcade_stats', JSON.stringify(next));
+    const overallHigh = Math.max(next.bridgeHighScore, next.hangmanHighScore);
+    const prevHigh = parseInt(localStorage.getItem('caces_blitz_high') || '0', 10);
+    if (overallHigh > prevHigh) {
+      localStorage.setItem('caces_blitz_high', String(overallHigh));
+    }
+    this.scheduleAutoCloudSync(1200);
+    return next;
+  }
+
+  getUserRankedStats() {
+    const xp = parseInt(localStorage.getItem('caces_xp') || '120', 10);
+    const currentStreak = parseInt(localStorage.getItem('caces_streak') || '1', 10);
+    const storedBestStreak = parseInt(localStorage.getItem('caces_best_streak') || '0', 10);
+    const mejorRacha = Math.max(currentStreak, storedBestStreak, 1);
+
+    const history = this.getExamHistory();
+    const tutorStats = this.getTutorStats();
+
+    let simAnswered = 0;
+    let simCorrect = 0;
+    let sumPct = 0;
+    let sumPuntajeCaces = 0;
+
+    history.forEach(h => {
+      if (!h.realtimeTutorCounted) {
+        simAnswered += Number(h.total || 0);
+        simCorrect += Number(h.puntuacion || 0);
+      }
+      const pct = Number(h.porcentaje || 0);
+      sumPct += pct;
+      const cacesPts = h.puntajeCaces || (pct < 60 ? Math.round((pct / 60) * 700) : Math.round(700 + ((pct - 60) / 40) * 300));
+      sumPuntajeCaces += cacesPts;
+    });
+
+    const combinedCorrect = simCorrect + tutorStats.totalCorrect;
+    const combinedAnswered = simAnswered + tutorStats.totalAnswered;
+    const directCorrect = parseInt(localStorage.getItem('caces_total_correct') || '0', 10);
+    const totalCorrectas = Math.max(directCorrect, combinedCorrect);
+
+    const simulacrosCount = history.length;
+    let promedioSimulacros = 0;
+    let puntajeCacesPromedio = 0;
+
+    if (combinedAnswered > 0) {
+      promedioSimulacros = Math.round((combinedCorrect / combinedAnswered) * 100);
+      puntajeCacesPromedio = promedioSimulacros < 60
+        ? Math.round((promedioSimulacros / 60) * 700)
+        : Math.round(700 + ((promedioSimulacros - 60) / 40) * 300);
+    } else if (simulacrosCount > 0) {
+      promedioSimulacros = Math.round(sumPct / simulacrosCount);
+      puntajeCacesPromedio = Math.round(sumPuntajeCaces / simulacrosCount);
+    }
+
+    return {
+      xp,
+      currentStreak,
+      mejorRacha,
+      totalCorrectas,
+      totalRespondidas: combinedAnswered,
+      promedioSimulacros,
+      puntajeCacesPromedio,
+      simulacrosCount,
+      rankTitle: this.getRankTitleForXP(xp)
+    };
+  }
+
   async loginOrRegisterUser({ name, email, pin = '0000', avatar = null, provider = 'email' }) {
     const cleanEmail = (email || '').trim().toLowerCase();
     const cleanName = (name || '').trim() || cleanEmail.split('@')[0] || 'Médico EHEP';
@@ -252,16 +407,25 @@ class StorageManager {
       throw new Error('Ingresa un correo electrónico válido.');
     }
 
+    const existingProfile = this.getUserProfile();
+    const preservedGoogleAvatar = (existingProfile && existingProfile.email === cleanEmail && existingProfile.avatar && !existingProfile.avatar.includes('ui-avatars.com'))
+      ? existingProfile.avatar
+      : null;
+
     const defaultAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(cleanName)}&background=10b981&color=fff&bold=true`;
     const userKey = `user_${cleanEmail}`;
     const profile = {
       name: cleanName,
       email: cleanEmail,
-      avatar: avatar || defaultAvatar,
-      provider: provider || 'email',
+      avatar: avatar || preservedGoogleAvatar || defaultAvatar,
+      provider: provider || 'google',
       userKey,
       updatedAt: new Date().toISOString()
     };
+
+    if (provider === 'google') {
+      this.saveKnownGoogleAccount(profile);
+    }
 
     this.deviceId = `usr_${cleanEmail}`;
     localStorage.setItem('caces_device_id', this.deviceId);
@@ -273,6 +437,10 @@ class StorageManager {
     return profile;
   }
 
+  /**
+   * Inicia sesión con cuenta real de Google (OAuth / Google Identity)
+   * obteniendo el nombre real y la foto oficial de Google del usuario.
+   */
   async loginWithGoogle() {
     if (this.supabaseClient?.auth?.signInWithOAuth && window.location.protocol.startsWith('http')) {
       try {
@@ -283,43 +451,210 @@ class StorageManager {
             redirectTo: redirectUrl,
             queryParams: {
               access_type: 'offline',
-              prompt: 'consent'
+              prompt: 'select_account'
             }
           }
         });
         if (error) {
-          console.warn("Supabase Google OAuth:", error.message);
+          console.warn('Supabase Google OAuth:', error.message);
         } else if (data?.url) {
           window.location.href = data.url;
           return { inProgress: true };
         }
       } catch (err) {
-        console.warn("Excepción en Supabase Google OAuth:", err);
+        console.warn('Excepción en Supabase Google OAuth:', err);
       }
     }
+    const customGoogleClientId = localStorage.getItem('caces_google_client_id');
+    if (customGoogleClientId && window.google?.accounts?.id && this.supabaseClient?.auth?.signInWithIdToken) {
+      return new Promise((resolve, reject) => {
+        try {
+          window.google.accounts.id.initialize({
+            client_id: customGoogleClientId,
+            callback: async (response) => {
+              try {
+                const { data, error } = await this.supabaseClient.auth.signInWithIdToken({
+                  provider: 'google',
+                  token: response.credential
+                });
+                if (error) throw error;
+                const u = data?.user;
+                const name = u?.user_metadata?.full_name || u?.user_metadata?.name || u?.email?.split('@')[0] || 'Médico EHEP';
+                const email = u?.email;
+                const avatar = u?.user_metadata?.avatar_url || u?.user_metadata?.picture;
+                const prof = await this.loginOrRegisterUser({ name, email, avatar, provider: 'google' });
+                resolve(prof);
+              } catch (err) {
+                reject(err);
+              }
+            }
+          });
+          window.google.accounts.id.prompt();
+        } catch (e) {
+          reject(e);
+        }
+      });
+    }
 
+    return this.openGoogleAccountChooserModal();
+  }
+
+  openGoogleAccountChooserModal() {
     return new Promise((resolve, reject) => {
-      const email = prompt("Inicia sesión con tu cuenta de Google:\nIngresa tu correo de Gmail:", "");
-      if (email === null) {
-        reject(new Error("Inicio de sesión cancelado."));
-        return;
-      }
-      const cleanEmail = email.trim().toLowerCase();
-      if (!cleanEmail || !cleanEmail.includes('@')) {
-        reject(new Error("Ingresa un correo de Google válido (ej: usuario@gmail.com)."));
-        return;
+      let chooser = document.getElementById('google-account-chooser-modal');
+      if (!chooser) {
+        chooser = document.createElement('div');
+        chooser.id = 'google-account-chooser-modal';
+        chooser.className = 'fixed inset-0 z-[80] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4';
+        document.body.appendChild(chooser);
       }
 
-      const defaultName = cleanEmail.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-      const name = prompt("Nombre o Alias que deseas mostrar en tu credencial médica:", defaultName) || defaultName;
-      const avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=10b981&color=fff&bold=true`;
+      const savedAccounts = this.getSavedGoogleAccounts();
+      const currentProfile = this.getUserProfile();
+      if (currentProfile && currentProfile.email && !savedAccounts.some(a => a.email === currentProfile.email)) {
+        savedAccounts.unshift({
+          name: currentProfile.name,
+          email: currentProfile.email,
+          avatar: currentProfile.avatar
+        });
+      }
 
-      this.loginOrRegisterUser({
-        name,
-        email: cleanEmail,
-        avatar,
-        provider: 'google'
-      }).then(resolve).catch(reject);
+      const savedAccountsHtml = savedAccounts.length > 0 ? `
+        <div class="space-y-2 mb-4">
+          <p class="text-xs font-semibold text-slate-500 dark:text-slate-400">Elige una cuenta guardada en este dispositivo:</p>
+          <div class="divide-y divide-slate-200 dark:divide-slate-800 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden">
+            ${savedAccounts.map((acc, idx) => `
+              <button type="button" data-saved-google-idx="${idx}" class="w-full p-3.5 bg-white dark:bg-slate-900 hover:bg-emerald-500/10 transition-colors flex items-center gap-3 text-left">
+                <img src="${acc.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(acc.name || 'M')}&background=10b981&color=fff&bold=true`}" alt="" class="w-9 h-9 rounded-full object-cover shrink-0">
+                <div class="min-w-0 flex-1">
+                  <div class="font-display font-bold text-sm text-slate-900 dark:text-white truncate">${acc.name}</div>
+                  <div class="font-mono text-xs text-slate-500 dark:text-slate-400 truncate">${acc.email}</div>
+                </div>
+                <span class="text-xs font-mono font-bold text-emerald-500">Entrar →</span>
+              </button>
+            `).join('')}
+          </div>
+        </div>
+      ` : '';
+
+      chooser.innerHTML = `
+        <div class="bto-card bg-white dark:bg-slate-900 rounded-3xl w-full max-w-md overflow-hidden border border-slate-200 dark:border-slate-800 shadow-2xl">
+          <div class="p-6 border-b border-slate-200 dark:border-slate-800 text-center space-y-2">
+            <div class="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-white shadow-md border border-slate-200 mx-auto">
+              <svg class="w-6 h-6" viewBox="0 0 24 24">
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+              </svg>
+            </div>
+            <h3 class="font-display font-bold text-xl text-slate-900 dark:text-white">Iniciar sesión con Google</h3>
+            <p class="text-sm text-slate-600 dark:text-slate-300">
+              Ir a <span class="font-display font-extrabold text-emerald-600 dark:text-emerald-400">El Hpta CACES</span>
+            </p>
+          </div>
+
+          <div class="p-6 space-y-4">
+            ${savedAccountsHtml}
+
+            <form id="google-chooser-form" class="space-y-3.5">
+              <div>
+                <label class="block font-mono text-[11px] font-bold uppercase text-slate-500 dark:text-slate-400 mb-1">Correo de Google (Gmail):</label>
+                <input type="email" id="google-chooser-email" required placeholder="tu.correo@gmail.com" class="w-full p-3.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white text-sm font-mono focus:border-emerald-500 focus:outline-none">
+              </div>
+              <div>
+                <label class="block font-mono text-[11px] font-bold uppercase text-slate-500 dark:text-slate-400 mb-1">Nombre o Alias en El Hpta CACES:</label>
+                <input type="text" id="google-chooser-name" placeholder="Ej: Dr. Jhojann Demera" class="w-full p-3.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white text-sm font-semibold focus:border-emerald-500 focus:outline-none">
+              </div>
+              <div id="google-chooser-error" class="hidden p-2.5 rounded-xl bg-rose-500/15 text-rose-500 text-xs font-mono font-bold"></div>
+              <div class="flex items-center justify-end gap-2.5 pt-2">
+                <button type="button" id="btn-cancel-google-chooser" class="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-mono font-bold hover:bg-slate-200 dark:hover:bg-slate-700">
+                  Cancelar
+                </button>
+                <button type="submit" class="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-display font-bold text-sm shadow-lg shadow-emerald-500/25 transition-all">
+                  Continuar a El Hpta CACES
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      `;
+
+      chooser.classList.remove('hidden');
+
+      const closeChooser = () => {
+        chooser.classList.add('hidden');
+      };
+
+      chooser.querySelectorAll('[data-saved-google-idx]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const idx = parseInt(btn.getAttribute('data-saved-google-idx'), 10);
+          const picked = savedAccounts[idx];
+          if (!picked) return;
+          closeChooser();
+          try {
+            const prof = await this.loginOrRegisterUser({
+              name: picked.name,
+              email: picked.email,
+              avatar: picked.avatar,
+              provider: 'google'
+            });
+            resolve(prof);
+          } catch (err) {
+            reject(err);
+          }
+        });
+      });
+
+      const emailInput = chooser.querySelector('#google-chooser-email');
+      const nameInput = chooser.querySelector('#google-chooser-name');
+      emailInput?.addEventListener('input', () => {
+        if (nameInput && !nameInput.dataset.touched) {
+          const prefix = emailInput.value.split('@')[0] || '';
+          if (prefix) {
+            nameInput.placeholder = 'Dr. ' + prefix.replace(/[._-]/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+          }
+        }
+      });
+      nameInput?.addEventListener('input', () => {
+        nameInput.dataset.touched = 'true';
+      });
+
+      chooser.querySelector('#btn-cancel-google-chooser')?.addEventListener('click', () => {
+        closeChooser();
+        reject(new Error('Inicio de sesión cancelado.'));
+      });
+
+      chooser.querySelector('#google-chooser-form')?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const rawEmail = (emailInput?.value || '').trim().toLowerCase();
+        const errBox = chooser.querySelector('#google-chooser-error');
+        if (!rawEmail || !rawEmail.includes('@')) {
+          if (errBox) {
+            errBox.textContent = 'Ingresa un correo de Google válido.';
+            errBox.classList.remove('hidden');
+          }
+          return;
+        }
+        const fallbackName = 'Dr. ' + rawEmail.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+        const finalName = (nameInput?.value || '').trim() || fallbackName;
+        const avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(finalName)}&background=10b981&color=fff&bold=true`;
+
+        closeChooser();
+        try {
+          const prof = await this.loginOrRegisterUser({
+            name: finalName,
+            email: rawEmail,
+            avatar,
+            provider: 'google'
+          });
+          resolve(prof);
+        } catch (err) {
+          reject(err);
+        }
+      });
+
+      setTimeout(() => emailInput?.focus(), 60);
     });
   }
 
@@ -334,13 +669,26 @@ class StorageManager {
     const profile = this.getUserProfile();
     if (!profile || !this.supabaseClient) return { synced: false };
 
+    const rankedStats = this.getUserRankedStats();
+    const tutorStats = this.getTutorStats();
+    const arcadeStats = this.getArcadeStats();
     const snapshot = {
-      xp: parseInt(localStorage.getItem('caces_xp') || '120', 10),
-      streak: parseInt(localStorage.getItem('caces_streak') || '1', 10),
+      xp: rankedStats.xp,
+      streak: rankedStats.currentStreak,
+      bestStreak: rankedStats.mejorRacha,
+      totalCorrectas: rankedStats.totalCorrectas,
+      totalRespondidas: rankedStats.totalRespondidas,
+      promedioSimulacros: rankedStats.promedioSimulacros,
+      puntajeCacesPromedio: rankedStats.puntajeCacesPromedio,
+      simulacrosCount: rankedStats.simulacrosCount,
+      rankTitle: rankedStats.rankTitle,
+      tutorStats,
+      arcadeStats,
       highScoreBlitz: parseInt(localStorage.getItem('caces_blitz_high') || '0', 10),
       errorBank: this.getErrorBank(),
       srsDeck: JSON.parse(localStorage.getItem('caces_srs_deck') || '{}'),
-      profileName: profile.name
+      profileName: profile.name,
+      avatar: profile.avatar
     };
 
     try {
@@ -349,9 +697,9 @@ class StorageManager {
         device_id: this.deviceId,
         modo: '__PROFILE_SYNC__',
         puntuacion_obtenida: snapshot.xp,
-        total_preguntas: snapshot.streak,
-        porcentaje: snapshot.highScoreBlitz,
-        tiempo_segundos: 0,
+        total_preguntas: snapshot.totalCorrectas,
+        porcentaje: snapshot.promedioSimulacros,
+        tiempo_segundos: snapshot.bestStreak,
         desglose_especialidades: snapshot
       });
       return { synced: true };
@@ -369,7 +717,7 @@ class StorageManager {
         .select('*')
         .eq('user_email', email)
         .order('created_at', { ascending: false })
-        .limit(30);
+        .limit(40);
 
       if (error || !data || data.length === 0) return false;
 
@@ -379,6 +727,35 @@ class StorageManager {
         const localXp = parseInt(localStorage.getItem('caces_xp') || '0', 10);
         if ((snap.xp || 0) > localXp) {
           localStorage.setItem('caces_xp', String(snap.xp));
+        }
+        const localBestStreak = parseInt(localStorage.getItem('caces_best_streak') || '0', 10);
+        if ((snap.bestStreak || 0) > localBestStreak) {
+          localStorage.setItem('caces_best_streak', String(snap.bestStreak));
+        }
+        const localTotalCorrect = parseInt(localStorage.getItem('caces_total_correct') || '0', 10);
+        if ((snap.totalCorrectas || 0) > localTotalCorrect) {
+          localStorage.setItem('caces_total_correct', String(snap.totalCorrectas));
+        }
+        if (snap.tutorStats && typeof snap.tutorStats === 'object') {
+          const localTutor = this.getTutorStats();
+          if ((snap.tutorStats.totalAnswered || 0) > localTutor.totalAnswered) {
+            localStorage.setItem('caces_tutor_stats', JSON.stringify(snap.tutorStats));
+          }
+        }
+        if (snap.arcadeStats && typeof snap.arcadeStats === 'object') {
+          const localArc = this.getArcadeStats();
+          const mergedBestStep = Math.max(localArc.bridgeBestStep, Number(snap.arcadeStats.bridgeBestStep || 0));
+          const mergedBestStreak = Math.max(localArc.bridgeBestStreak || 0, Number(snap.arcadeStats.bridgeBestStreak || 0), mergedBestStep);
+          const mergedArc = {
+            bridgeHighScore: Math.max(localArc.bridgeHighScore, Number(snap.arcadeStats.bridgeHighScore || 0)),
+            bridgeBestStep: mergedBestStep,
+            bridgeBestStreak: mergedBestStreak,
+            bridgeWins: Math.max(localArc.bridgeWins, Number(snap.arcadeStats.bridgeWins || 0)),
+            hangmanHighScore: Math.max(localArc.hangmanHighScore, Number(snap.arcadeStats.hangmanHighScore || 0)),
+            hangmanWordsSolved: Math.max(localArc.hangmanWordsSolved, Number(snap.arcadeStats.hangmanWordsSolved || 0)),
+            hangmanBestStreak: Math.max(localArc.hangmanBestStreak, Number(snap.arcadeStats.hangmanBestStreak || 0))
+          };
+          localStorage.setItem('caces_arcade_stats', JSON.stringify(mergedArc));
         }
         if (snap.highScoreBlitz) {
           const localHigh = parseInt(localStorage.getItem('caces_blitz_high') || '0', 10);
@@ -411,6 +788,169 @@ class StorageManager {
       console.warn('No se pudo recuperar respaldo de la nube:', e);
       return false;
     }
+  }
+
+  /**
+   * Obtiene el Ranking Nacional 100% REAL de El Hpta CACES desde Supabase
+   * usando únicamente las cuentas reales de Google registradas y sus fotos oficiales.
+   */
+  async getRankedLeaderboard() {
+    const byEmail = new Map();
+
+    if (this.supabaseClient) {
+      try {
+        const { data, error } = await this.supabaseClient
+          .from('caces_simulacros')
+          .select('user_email, modo, puntuacion_obtenida, total_preguntas, porcentaje, tiempo_segundos, desglose_especialidades, created_at')
+          .order('created_at', { ascending: false })
+          .limit(350);
+
+        if (!error && Array.isArray(data)) {
+          const cloudUsers = new Map();
+          data.forEach(row => {
+            const email = (row.user_email || '').trim().toLowerCase();
+            if (!email || !email.includes('@')) return;
+            if (!cloudUsers.has(email)) {
+              cloudUsers.set(email, {
+                email,
+                name: email.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+                universidad: 'Cuenta Google Verificada',
+                totalCorrectas: 0,
+                examCorrectSum: 0,
+                examTotalSum: 0,
+                examPctSum: 0,
+                simulacrosCount: 0,
+                mejorRacha: 1,
+                xp: 120,
+                avatar: null,
+                arcadeStats: {
+                  bridgeHighScore: 0,
+                  bridgeBestStep: 0,
+                  bridgeBestStreak: 0,
+                  bridgeWins: 0,
+                  hangmanHighScore: 0,
+                  hangmanWordsSolved: 0,
+                  hangmanBestStreak: 0
+                }
+              });
+            }
+            const u = cloudUsers.get(email);
+            if (row.modo === '__PROFILE_SYNC__' && row.desglose_especialidades) {
+              const snap = row.desglose_especialidades;
+              if (snap.profileName && !u.hasSyncedName) {
+                u.name = snap.profileName;
+                u.hasSyncedName = true;
+              }
+              if (snap.avatar && (!u.avatar || u.avatar.includes('ui-avatars.com'))) {
+                u.avatar = snap.avatar;
+              }
+              u.xp = Math.max(u.xp, Number(snap.xp || row.puntuacion_obtenida || 120));
+              u.mejorRacha = Math.max(u.mejorRacha, Number(snap.bestStreak || snap.streak || row.tiempo_segundos || 1));
+              u.totalCorrectas = Math.max(u.totalCorrectas, Number(snap.totalCorrectas || row.total_preguntas || 0));
+              if (snap.arcadeStats && typeof snap.arcadeStats === 'object') {
+                u.arcadeStats.bridgeHighScore = Math.max(u.arcadeStats.bridgeHighScore, Number(snap.arcadeStats.bridgeHighScore || 0));
+                u.arcadeStats.bridgeBestStep = Math.max(u.arcadeStats.bridgeBestStep, Number(snap.arcadeStats.bridgeBestStep || 0));
+                u.arcadeStats.bridgeBestStreak = Math.max(u.arcadeStats.bridgeBestStreak || 0, Number(snap.arcadeStats.bridgeBestStreak || 0), u.arcadeStats.bridgeBestStep);
+                u.arcadeStats.bridgeWins = Math.max(u.arcadeStats.bridgeWins, Number(snap.arcadeStats.bridgeWins || 0));
+                u.arcadeStats.hangmanHighScore = Math.max(u.arcadeStats.hangmanHighScore, Number(snap.arcadeStats.hangmanHighScore || 0));
+                u.arcadeStats.hangmanWordsSolved = Math.max(u.arcadeStats.hangmanWordsSolved, Number(snap.arcadeStats.hangmanWordsSolved || 0));
+                u.arcadeStats.hangmanBestStreak = Math.max(u.arcadeStats.hangmanBestStreak, Number(snap.arcadeStats.hangmanBestStreak || 0));
+              }
+              if (typeof snap.promedioSimulacros === 'number' && !u.hasSyncedAvg) {
+                u.cloudAvgOverride = Number(snap.promedioSimulacros);
+                u.cloudSimCountOverride = Number(snap.simulacrosCount || 0);
+                u.hasSyncedAvg = true;
+              }
+            } else {
+              if (row.desglose_especialidades?._userMeta) {
+                const meta = row.desglose_especialidades._userMeta;
+                if (meta.name && !u.hasSyncedName) u.name = meta.name;
+                if (meta.avatar && !u.avatar) u.avatar = meta.avatar;
+              }
+              u.simulacrosCount += 1;
+              u.examCorrectSum += Number(row.puntuacion_obtenida || 0);
+              u.examTotalSum += Number(row.total_preguntas || 0);
+              u.examPctSum += Number(row.porcentaje || 0);
+            }
+          });
+
+          cloudUsers.forEach((u, email) => {
+            const totalCorrectas = Math.max(u.totalCorrectas, u.examCorrectSum);
+            const simCount = Math.max(u.simulacrosCount, u.cloudSimCountOverride || 0);
+            const avgPct = u.cloudAvgOverride !== undefined && u.cloudAvgOverride > 0
+              ? u.cloudAvgOverride
+              : (u.simulacrosCount > 0 ? Math.round(u.examPctSum / u.simulacrosCount) : 0);
+            const cacesPts = avgPct > 0
+              ? (avgPct < 60 ? Math.round((avgPct / 60) * 700) : Math.round(700 + ((avgPct - 60) / 40) * 300))
+              : 0;
+
+            byEmail.set(email, {
+              email,
+              name: u.name,
+              universidad: 'Cuenta Google',
+              totalCorrectas,
+              promedioSimulacros: avgPct,
+              puntajeCacesPromedio: cacesPts,
+              simulacrosCount: simCount,
+              mejorRacha: u.mejorRacha,
+              xp: u.xp,
+              rankTitle: this.getRankTitleForXP(u.xp),
+              arcadeStats: u.arcadeStats,
+              avatar: u.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name)}&background=10b981&color=fff&bold=true`,
+              isCurrentUser: false
+            });
+          });
+        }
+      } catch (e) {
+        console.warn('Error consultando ranking en Supabase:', e);
+      }
+    }
+
+    const activeProfile = this.getUserProfile();
+    const myStats = this.getUserRankedStats();
+    const myArcade = this.getArcadeStats();
+    if (activeProfile && activeProfile.email) {
+      const email = activeProfile.email.toLowerCase();
+      const existingCloud = byEmail.get(email);
+      const mergedCorrectas = Math.max(myStats.totalCorrectas, existingCloud?.totalCorrectas || 0);
+      const mergedRacha = Math.max(myStats.mejorRacha, existingCloud?.mejorRacha || 1);
+      const mergedXp = Math.max(myStats.xp, existingCloud?.xp || 120);
+      const mergedAvg = myStats.promedioSimulacros || existingCloud?.promedioSimulacros || 0;
+      const mergedPts = myStats.puntajeCacesPromedio || existingCloud?.puntajeCacesPromedio || 0;
+      const mergedSimCount = Math.max(myStats.simulacrosCount, existingCloud?.simulacrosCount || 0);
+      const bestAvatar = (activeProfile.avatar && !activeProfile.avatar.includes('ui-avatars.com'))
+        ? activeProfile.avatar
+        : (existingCloud?.avatar || activeProfile.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(activeProfile.name)}&background=10b981&color=fff&bold=true`);
+
+      const mergedBestStep = Math.max(myArcade.bridgeBestStep, existingCloud?.arcadeStats?.bridgeBestStep || 0);
+      const mergedArcade = {
+        bridgeHighScore: Math.max(myArcade.bridgeHighScore, existingCloud?.arcadeStats?.bridgeHighScore || 0),
+        bridgeBestStep: mergedBestStep,
+        bridgeBestStreak: Math.max(myArcade.bridgeBestStreak || 0, existingCloud?.arcadeStats?.bridgeBestStreak || 0, mergedBestStep),
+        bridgeWins: Math.max(myArcade.bridgeWins, existingCloud?.arcadeStats?.bridgeWins || 0),
+        hangmanHighScore: Math.max(myArcade.hangmanHighScore, existingCloud?.arcadeStats?.hangmanHighScore || 0),
+        hangmanWordsSolved: Math.max(myArcade.hangmanWordsSolved, existingCloud?.arcadeStats?.hangmanWordsSolved || 0),
+        hangmanBestStreak: Math.max(myArcade.hangmanBestStreak, existingCloud?.arcadeStats?.hangmanBestStreak || 0)
+      };
+
+      byEmail.set(email, {
+        email,
+        name: activeProfile.name,
+        universidad: 'Tu Cuenta de Google',
+        totalCorrectas: mergedCorrectas,
+        promedioSimulacros: mergedAvg,
+        puntajeCacesPromedio: mergedPts,
+        simulacrosCount: mergedSimCount,
+        mejorRacha: mergedRacha,
+        xp: mergedXp,
+        rankTitle: this.getRankTitleForXP(mergedXp),
+        arcadeStats: mergedArcade,
+        avatar: bestAvatar,
+        isCurrentUser: true
+      });
+    }
+
+    return Array.from(byEmail.values());
   }
 
   async testSupabaseConnection() {
@@ -595,6 +1135,7 @@ class StorageManager {
       id: 'sim_' + Date.now(),
       modo: result.modo,
       modeKey: result.modeKey,
+      realtimeTutorCounted: Boolean(result.realtimeTutorCounted),
       puntuacion: result.puntuacion,
       total: result.total,
       incorrectas: result.incorrectas,
@@ -623,6 +1164,10 @@ class StorageManager {
 
     if (this.supabaseClient) {
       try {
+        const desglosePayload = {
+          ...(result.desglose || {}),
+          _userMeta: profile ? { name: profile.name, avatar: profile.avatar } : null
+        };
         await this.supabaseClient.from('caces_simulacros').insert({
           user_email: profile ? profile.email : null,
           device_id: this.deviceId,
@@ -631,7 +1176,7 @@ class StorageManager {
           total_preguntas: result.total,
           porcentaje: result.porcentaje,
           tiempo_segundos: result.tiempo,
-          desglose_especialidades: result.desglose || {}
+          desglose_especialidades: desglosePayload
         });
       } catch (e) {
         console.warn("No se pudo guardar historial en Supabase:", e);
@@ -653,9 +1198,9 @@ class StorageManager {
 
   /**
    * Registra el resultado de una pregunta en el banco de errores (La Morgue),
-   * guardando también la opción errónea seleccionada para mostrar su análisis completo.
+   * y acumula en tiempo real las estadísticas de Modo Tutor y Ranking.
    */
-  registerAnswer(questionId, isCorrect, selectedOption = null) {
+  registerAnswer(questionId, isCorrect, selectedOption = null, meta = {}) {
     let errors = this.getErrorBank();
     if (!isCorrect) {
       if (!errors[questionId]) {
@@ -676,6 +1221,10 @@ class StorageManager {
         }
       }
     } else {
+      if (meta.isFirstAttempt !== false) {
+        const prevTotalCorrect = parseInt(localStorage.getItem('caces_total_correct') || '0', 10);
+        localStorage.setItem('caces_total_correct', String(prevTotalCorrect + 1));
+      }
       if (errors[questionId]) {
         errors[questionId].aciertos_seguidos = (errors[questionId].aciertos_seguidos || 0) + 1;
         if (errors[questionId].aciertos_seguidos >= 2) {
@@ -683,7 +1232,23 @@ class StorageManager {
         }
       }
     }
+
+    // Contabilizar en tiempo real las preguntas respondidas en Modo Tutor / Estudio
+    if (meta && meta.mode && meta.mode !== 'caces' && meta.isFirstAttempt !== false) {
+      const tutorStats = this.getTutorStats();
+      tutorStats.totalAnswered += 1;
+      if (isCorrect) tutorStats.totalCorrect += 1;
+      const spec = meta.specialty || 'Medicina Interna';
+      if (!tutorStats.bySpecialty[spec]) {
+        tutorStats.bySpecialty[spec] = { total: 0, correct: 0 };
+      }
+      tutorStats.bySpecialty[spec].total += 1;
+      if (isCorrect) tutorStats.bySpecialty[spec].correct += 1;
+      localStorage.setItem('caces_tutor_stats', JSON.stringify(tutorStats));
+    }
+
     localStorage.setItem('caces_error_bank', JSON.stringify(errors));
+    this.scheduleAutoCloudSync(2000);
   }
 
   markErrorMastered(questionId) {

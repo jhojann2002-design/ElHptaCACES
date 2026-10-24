@@ -8,13 +8,14 @@ export class AnalyticsManager {
 
   renderStats() {
     const history = Storage.getExamHistory();
+    const tutorStats = Storage.getTutorStats();
     const errorBank = Storage.getErrorBank();
     const errorList = Object.values(errorBank);
     const errorsActive = errorList.filter(e => !e.dominada).length;
     const errorsMastered = errorList.filter(e => e.dominada).length;
 
-    let totalQuestionsAnswered = 0;
-    let totalCorrect = 0;
+    let totalQuestionsAnswered = tutorStats.totalAnswered || 0;
+    let totalCorrect = tutorStats.totalCorrect || 0;
     let totalTime = 0;
 
     const specialtyAggregates = {
@@ -27,19 +28,34 @@ export class AnalyticsManager {
       "Bioética": { total: 0, correct: 0 }
     };
 
-    history.forEach(sim => {
-      totalQuestionsAnswered += sim.total || 0;
-      totalCorrect += sim.puntuacion || 0;
-      totalTime += sim.tiempo || 0;
+    // 1. Sumar estadísticas acumuladas en tiempo real del Modo Tutor
+    if (tutorStats.bySpecialty) {
+      Object.keys(tutorStats.bySpecialty).forEach(spec => {
+        if (!specialtyAggregates[spec]) {
+          specialtyAggregates[spec] = { total: 0, correct: 0 };
+        }
+        specialtyAggregates[spec].total += tutorStats.bySpecialty[spec].total || 0;
+        specialtyAggregates[spec].correct += tutorStats.bySpecialty[spec].correct || 0;
+      });
+    }
 
-      if (sim.desglose) {
-        Object.keys(sim.desglose).forEach(spec => {
-          if (!specialtyAggregates[spec]) {
-            specialtyAggregates[spec] = { total: 0, correct: 0 };
-          }
-          specialtyAggregates[spec].total += sim.desglose[spec].total || 0;
-          specialtyAggregates[spec].correct += sim.desglose[spec].correct || 0;
-        });
+    // 2. Sumar Simulacros cerrados (y sesiones previas que no fueron contadas en tiempo real)
+    history.forEach(sim => {
+      totalTime += sim.tiempo || 0;
+      if (!sim.realtimeTutorCounted) {
+        totalQuestionsAnswered += sim.total || 0;
+        totalCorrect += sim.puntuacion || 0;
+
+        if (sim.desglose) {
+          Object.keys(sim.desglose).forEach(spec => {
+            if (spec.startsWith('_')) return;
+            if (!specialtyAggregates[spec]) {
+              specialtyAggregates[spec] = { total: 0, correct: 0 };
+            }
+            specialtyAggregates[spec].total += sim.desglose[spec].total || 0;
+            specialtyAggregates[spec].correct += sim.desglose[spec].correct || 0;
+          });
+        }
       }
     });
 
@@ -55,7 +71,10 @@ export class AnalyticsManager {
     if (kpiAnswered) kpiAnswered.textContent = totalQuestionsAnswered;
     if (kpiAccuracy) kpiAccuracy.textContent = `${globalPct}%`;
     if (kpiErrors) kpiErrors.textContent = `${errorsActive} act. / ${errorsMastered} dom.`;
-    if (kpiSimulacros) kpiSimulacros.textContent = history.length;
+    if (kpiSimulacros) {
+      const sessionsCount = history.length + (tutorStats.totalAnswered > 0 && history.length === 0 ? 1 : 0);
+      kpiSimulacros.textContent = sessionsCount;
+    }
 
     let bestSpec = null;
     let bestPct = -1;
@@ -80,14 +99,14 @@ export class AnalyticsManager {
     const strengthEl = document.getElementById('kpi-strength');
     const weaknessEl = document.getElementById('kpi-weakness');
     if (strengthEl) {
-      strengthEl.textContent = bestSpec ? `${bestSpec} (${bestPct}%)` : "Completa un simulacro";
+      strengthEl.textContent = bestSpec ? `${bestSpec} (${bestPct}%)` : "Responde en Simulador o Tutor";
     }
     if (weaknessEl) {
-      weaknessEl.textContent = weakSpec ? `${weakSpec} (${weakPct}%)` : "Completa un simulacro";
+      weaknessEl.textContent = weakSpec ? `${weakSpec} (${weakPct}%)` : "Responde en Simulador o Tutor";
     }
 
     this.renderRadarChart(specialtyAggregates);
-    this.renderHistoryChart(history);
+    this.renderHistoryChart(history, tutorStats, globalPct);
   }
 
   isDarkMode() {
@@ -119,7 +138,7 @@ export class AnalyticsManager {
       data: {
         labels: labels,
         datasets: [{
-          label: '% Dominio EHEP',
+          label: '% Dominio EHEP (Simulador + Tutor)',
           data: data,
           backgroundColor: fillBg,
           borderColor: accentColor,
@@ -162,7 +181,7 @@ export class AnalyticsManager {
     });
   }
 
-  renderHistoryChart(history) {
+  renderHistoryChart(history, tutorStats = null, globalPct = 0) {
     const canvas = document.getElementById('historyChart');
     if (!canvas || !window.Chart) return;
 
@@ -172,8 +191,14 @@ export class AnalyticsManager {
     const lineColor = isDark ? '#CCFF00' : '#0f172a';
 
     const recent = [...history].reverse().slice(-12);
-    const labels = recent.map((item, idx) => `#${idx + 1}`);
-    const data = recent.map(item => item.porcentaje || 0);
+    let labels = recent.map((item, idx) => `#${idx + 1}`);
+    let data = recent.map(item => item.porcentaje || 0);
+
+    if (tutorStats && tutorStats.totalAnswered > 0) {
+      const tutorPct = Math.round((tutorStats.totalCorrect / tutorStats.totalAnswered) * 100);
+      labels.push('Tutor');
+      data.push(tutorPct);
+    }
 
     if (this.historyChart) {
       this.historyChart.destroy();
@@ -185,7 +210,7 @@ export class AnalyticsManager {
         labels: labels.length > 0 ? labels : ['Sin datos'],
         datasets: [
           {
-            label: '% Nota Guardia',
+            label: '% Precisión (Simulacros + Tutor)',
             data: data.length > 0 ? data : [0],
             fill: true,
             borderColor: lineColor,

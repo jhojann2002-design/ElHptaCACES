@@ -1,8 +1,11 @@
-const CACHE_NAME = 'caces-medprep-v4';
+const CACHE_NAME = 'caces-medprep-v7';
 const CORE_ASSETS = [
   './',
   './index.html',
   './manifest.json',
+  './assets/logo-hpta-caces.png',
+  './assets/juego-puente-cristal.png',
+  './assets/juego-ahorcado.png',
   './js/app.js',
   './js/exam-engine.js',
   './js/ai-tutor.js',

@@ -1,7 +1,7 @@
 {
-  "name": "CACES MedPrep - Simulador Médico EHEP Ecuador",
-  "short_name": "CACES MedPrep",
-  "description": "Plataforma de alta fidelidad para el Examen de Habilitación Profesional en Medicina CACES Ecuador. 2,453 preguntas PRO, Guías MSP, Flashcards y Tutor IA.",
+  "name": "El Hpta CACES",
+  "short_name": "El Hpta CACES",
+  "description": "El Hpta CACES - Simulador Médico y Plataforma Competitiva EHEP Ecuador. 2,453 preguntas PRO, Rankeds, Guías MSP, Flashcards y Tutor IA.",
   "start_url": "./index.html",
   "display": "standalone",
   "orientation": "any",
