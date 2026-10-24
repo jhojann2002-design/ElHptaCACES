@@ -6,7 +6,7 @@ import { Analytics } from './analytics.js';
 import { Flashcards } from './flashcards.js';
 import { ClinicalCalculators } from './calculators.js';
 import { aiTutor } from './ai-tutor.js';
-import { ArcadeManager } from './games.js';
+import { ArcadeManager } from './games.js?v=10';
 
 /**
  * Biblioteca de Vectores Minimalistas SVG (Cero Emojis)
@@ -371,6 +371,7 @@ class AppController {
   // =========================================================================
   updateStudyNavbarVisibility() {
     const studyNavbar = document.getElementById('study-mode-navbar');
+    const mobileDialRow = document.getElementById('mobile-dial-row');
     if (!studyNavbar) return;
 
     const activeScreen = document.getElementById('exam-active-screen');
@@ -379,8 +380,15 @@ class AppController {
       activeScreen &&
       !activeScreen.classList.contains('hidden');
 
-    // En Modo Simulador o mientras se está respondiendo en Modo Tutor, ocultar la barra de Arcade/Cards para no saturar
-    if (this.activeDialMode !== 'estudio' || isDoingQuestionsInTutor) {
+    const isFullScreenSubModule = ['arcade', 'ranked', 'calculadoras', 'analitica'].includes(this.currentTab);
+
+    // En Juegos (arcade) ocultar también el dial móvil para que no ocupe ni se superponga en celulares
+    if (mobileDialRow) {
+      mobileDialRow.classList.toggle('hidden', this.currentTab === 'arcade');
+    }
+
+    // En Modo Simulador, durante preguntas activas en Tutor, o dentro de Juegos/Ranked, ocultar la barra secundaria para no superponer
+    if (this.activeDialMode !== 'estudio' || isDoingQuestionsInTutor || isFullScreenSubModule) {
       studyNavbar.classList.add('hidden');
     } else {
       studyNavbar.classList.remove('hidden');
@@ -1565,6 +1573,17 @@ class AppController {
     }
   }
 
+  renderOptionPercentageBadge(pct) {
+    const safePct = Math.max(0, Math.min(100, Math.round(Number(pct) || 0)));
+    return `
+      <span class="caces-pct-pill" tabindex="0" aria-label="Porcentaje de personas que escogieron esta opción: ${safePct}%">
+        <span>${safePct}%</span>
+        <span class="caces-pct-info-icon" aria-hidden="true">i</span>
+        <span class="caces-pct-tooltip" role="tooltip">Porcentaje de personas que escogieron esta opción</span>
+      </span>
+    `;
+  }
+
   renderExamState(state) {
     const q = state.question;
     if (!q) return;
@@ -1638,6 +1657,7 @@ class AppController {
       const hasFirstAttempt = !!(state.firstAttemptAnswer);
       const showFeedback = (state.mode === 'study' || state.mode === 'errors' || state.isFinished || state.isReviewing) && (selected || hasFirstAttempt || state.isReviewing);
       const opts = Array.isArray(q.opciones) ? q.opciones : [];
+      const optionStats = showFeedback ? Storage.getQuestionOptionStats(q.id) : null;
 
       opts.forEach(opt => {
         const btn = document.createElement('button');
@@ -1671,6 +1691,9 @@ class AppController {
         }
 
         const cleanOptHtml = formatClinicalMarkdown(opt.texto, { inline: true });
+        const pctBadgeHtml = (showFeedback && optionStats && typeof optionStats.percentages?.[opt.id] === 'number')
+          ? this.renderOptionPercentageBadge(optionStats.percentages[opt.id])
+          : '';
 
         btn.innerHTML = `
           <span class="inline-flex items-center justify-center w-8 h-8 rounded-xl font-mono font-bold text-sm shrink-0 border ${
@@ -1678,7 +1701,7 @@ class AppController {
               ? 'bg-emerald-500 text-slate-950 border-emerald-500'
               : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-700'
           }">${opt.id}</span>
-          <span class="clinical-prose text-base sm:text-lg leading-relaxed pt-0.5">${cleanOptHtml}</span>
+          <span class="clinical-prose text-base sm:text-lg leading-relaxed pt-0.5 flex-1">${cleanOptHtml}${pctBadgeHtml}</span>
         `;
 
         btn.addEventListener('click', () => {
@@ -1959,6 +1982,7 @@ class AppController {
       const isUnanswered = !userAns;
       const breakdown = q.desglose_opciones || q.distractores || {};
       const opts = Array.isArray(q.opciones) ? q.opciones : [];
+      const optionStats = Storage.getQuestionOptionStats(q.id);
 
       let statusBadgeHtml = '';
       if (isCorrect) {
@@ -1973,6 +1997,9 @@ class AppController {
         const isOptCorrect = opt.id === q.correcta;
         const isOptSelected = opt.id === userAns;
         const optText = formatClinicalMarkdown(opt.texto || opt.text || '', { inline: true });
+        const pctBadgeHtml = (optionStats && typeof optionStats.percentages?.[opt.id] === 'number')
+          ? this.renderOptionPercentageBadge(optionStats.percentages[opt.id])
+          : '';
 
         let boxStyle = 'border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/50 text-slate-700 dark:text-slate-300';
         let badgeStyle = 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400';
@@ -1991,7 +2018,7 @@ class AppController {
         return `
           <div class="p-3.5 rounded-xl border ${boxStyle} flex items-start gap-3 text-xs sm:text-sm">
             <span class="inline-flex items-center justify-center w-6 h-6 rounded-lg font-mono font-bold shrink-0 ${badgeStyle}">${opt.id}</span>
-            <div class="flex-1 leading-relaxed">${optText} ${tagLabel}</div>
+            <div class="flex-1 leading-relaxed">${optText}${pctBadgeHtml} ${tagLabel}</div>
           </div>
         `;
       }).join('');

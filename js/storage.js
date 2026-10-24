@@ -81,6 +81,8 @@ class StorageManager {
     this.deviceId = this.getOrCreateDeviceId();
     this.supabaseClient = null;
     this._syncDebounceTimer = null;
+    this._cachedQuestions = null;
+    this._questionsLoadPromise = null;
     this.initSupabase();
 
     if (localStorage.getItem('caces_master_db_v4_pro') !== 'true') {
@@ -92,6 +94,15 @@ class StorageManager {
       localStorage.removeItem('banco_caces');
       localStorage.setItem('caces_master_db_v4_pro', 'true');
     }
+  }
+
+  isAdminAuthorized() {
+    if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('caces_admin_unlocked') === 'true') {
+      return true;
+    }
+    const profile = this.getUserProfile();
+    const adminEmail = (SupabaseConfig.ADMIN_EMAIL || 'jhojanndemera@gmail.com').toLowerCase();
+    return Boolean(profile && profile.email && profile.email.toLowerCase() === adminEmail);
   }
 
   getOrCreateDeviceId() {
@@ -672,6 +683,7 @@ class StorageManager {
     const rankedStats = this.getUserRankedStats();
     const tutorStats = this.getTutorStats();
     const arcadeStats = this.getArcadeStats();
+    const optionStats = this.getLocalOptionStatsMap();
     const snapshot = {
       xp: rankedStats.xp,
       streak: rankedStats.currentStreak,
@@ -684,6 +696,7 @@ class StorageManager {
       rankTitle: rankedStats.rankTitle,
       tutorStats,
       arcadeStats,
+      optionStats,
       highScoreBlitz: parseInt(localStorage.getItem('caces_blitz_high') || '0', 10),
       errorBank: this.getErrorBank(),
       srsDeck: JSON.parse(localStorage.getItem('caces_srs_deck') || '{}'),
@@ -692,6 +705,13 @@ class StorageManager {
     };
 
     try {
+      // Eliminar snapshots previos de este mismo usuario para evitar inflar la tabla de Supabase
+      await this.supabaseClient
+        .from('caces_simulacros')
+        .delete()
+        .eq('user_email', profile.email)
+        .eq('modo', '__PROFILE_SYNC__');
+
       await this.supabaseClient.from('caces_simulacros').insert({
         user_email: profile.email,
         device_id: this.deviceId,
@@ -757,6 +777,9 @@ class StorageManager {
           };
           localStorage.setItem('caces_arcade_stats', JSON.stringify(mergedArc));
         }
+        if (snap.optionStats && typeof snap.optionStats === 'object') {
+          this.mergeCloudOptionStats(snap.optionStats, true);
+        }
         if (snap.highScoreBlitz) {
           const localHigh = parseInt(localStorage.getItem('caces_blitz_high') || '0', 10);
           if (snap.highScoreBlitz > localHigh) {
@@ -769,7 +792,7 @@ class StorageManager {
         }
       }
 
-      const realExams = data.filter(r => r.modo !== '__PROFILE_SYNC__');
+      const realExams = data.filter(r => r.modo !== '__PROFILE_SYNC__' && r.modo !== '__OPTION_STATS__');
       if (realExams.length > 0 && this.getExamHistory().length === 0) {
         const reconstructed = realExams.map(r => ({
           id: r.id,
@@ -783,6 +806,9 @@ class StorageManager {
         }));
         localStorage.setItem('caces_exam_history', JSON.stringify(reconstructed));
       }
+
+      // Cargar agregados globales de selección de opciones desde Supabase
+      this.pullGlobalOptionStatsFromCloud().catch(() => {});
       return true;
     } catch (e) {
       console.warn('No se pudo recuperar respaldo de la nube:', e);
@@ -996,56 +1022,74 @@ class StorageManager {
     return Array.from(map.values());
   }
 
-  async getAllQuestions() {
+  async getAllQuestions(forceRefresh = false) {
     if (localStorage.getItem('caces_force_empty') === 'true') {
+      this._cachedQuestions = [];
       return [];
     }
 
-    let baseQuestions = [];
-    try {
-      const resp = await fetch(`data/banco_inicial.json?nocache=${Date.now()}`, { cache: 'no-store' });
-      if (resp.ok) {
-        baseQuestions = await resp.json();
-      }
-    } catch (e) {
-      console.warn("No se pudo cargar data/banco_inicial.json:", e);
+    if (!forceRefresh && Array.isArray(this._cachedQuestions) && this._cachedQuestions.length > 0) {
+      return this._cachedQuestions;
     }
 
-    let localCustom = [];
-    try {
-      const stored = localStorage.getItem('caces_custom_questions');
-      if (stored) {
-        localCustom = JSON.parse(stored);
-      }
-    } catch (e) {
-      console.warn("Error leyendo caces_custom_questions:", e);
+    if (!forceRefresh && this._questionsLoadPromise) {
+      return this._questionsLoadPromise;
     }
 
-    let cloudQuestions = [];
-    if (this.supabaseClient) {
+    this._questionsLoadPromise = (async () => {
+      let baseQuestions = [];
       try {
-        const { data, error } = await this.supabaseClient
-          .from('caces_questions')
-          .select('*');
-        if (!error && data) {
-          cloudQuestions = data;
+        const resp = await fetch('data/banco_inicial.json');
+        if (resp.ok) {
+          baseQuestions = await resp.json();
         }
       } catch (e) {
-        console.warn("Error consultando Supabase:", e);
+        console.warn("No se pudo cargar data/banco_inicial.json:", e);
       }
-    }
 
-    const combined = [...baseQuestions, ...localCustom, ...cloudQuestions];
-    const unique = this.deduplicateQuestions(combined);
-
-    if (localCustom.length > 0) {
-      const cleanCustom = this.deduplicateQuestions(localCustom);
-      if (cleanCustom.length !== localCustom.length) {
-        localStorage.setItem('caces_custom_questions', JSON.stringify(cleanCustom));
+      let localCustom = [];
+      try {
+        const stored = localStorage.getItem('caces_custom_questions');
+        if (stored) {
+          localCustom = JSON.parse(stored);
+        }
+      } catch (e) {
+        console.warn("Error leyendo caces_custom_questions:", e);
       }
-    }
 
-    return unique.map(q => normalizeQuestionOptions(q));
+      let cloudQuestions = [];
+      if (this.supabaseClient) {
+        try {
+          const { data, error } = await this.supabaseClient
+            .from('caces_questions')
+            .select('*');
+          if (!error && data) {
+            cloudQuestions = data;
+          }
+        } catch (e) {
+          console.warn("Error consultando Supabase:", e);
+        }
+      }
+
+      const combined = [...baseQuestions, ...localCustom, ...cloudQuestions];
+      const unique = this.deduplicateQuestions(combined);
+
+      if (localCustom.length > 0) {
+        const cleanCustom = this.deduplicateQuestions(localCustom);
+        if (cleanCustom.length !== localCustom.length) {
+          localStorage.setItem('caces_custom_questions', JSON.stringify(cleanCustom));
+        }
+      }
+
+      // Cargar estadísticas globales de opciones en segundo plano si aún no se han cargado
+      this.pullGlobalOptionStatsFromCloud().catch(() => {});
+
+      this._cachedQuestions = unique.map(q => normalizeQuestionOptions(q));
+      this._questionsLoadPromise = null;
+      return this._cachedQuestions;
+    })();
+
+    return this._questionsLoadPromise;
   }
 
   async saveCustomQuestions(newQuestions) {
@@ -1089,8 +1133,9 @@ class StorageManager {
     const updated = trulyNew.length > 0 ? [...existing, ...trulyNew] : existing;
     localStorage.setItem('caces_custom_questions', JSON.stringify(updated));
     localStorage.removeItem('caces_force_empty');
+    this._cachedQuestions = null;
 
-    if (trulyNew.length > 0 && this.supabaseClient) {
+    if (trulyNew.length > 0 && this.supabaseClient && this.isAdminAuthorized()) {
       try {
         const chunkSize = 100;
         for (let i = 0; i < trulyNew.length; i += chunkSize) {
@@ -1123,6 +1168,7 @@ class StorageManager {
     const removedCount = beforeCount - cleanList.length;
 
     localStorage.setItem('caces_custom_questions', JSON.stringify(cleanList));
+    this._cachedQuestions = null;
     return {
       before: beforeCount,
       after: cleanList.length,
@@ -1166,7 +1212,8 @@ class StorageManager {
       try {
         const desglosePayload = {
           ...(result.desglose || {}),
-          _userMeta: profile ? { name: profile.name, avatar: profile.avatar } : null
+          _userMeta: profile ? { name: profile.name, avatar: profile.avatar } : null,
+          _respuestasUsuario: result.respuestasUsuario || {}
         };
         await this.supabaseClient.from('caces_simulacros').insert({
           user_email: profile ? profile.email : null,
@@ -1196,11 +1243,218 @@ class StorageManager {
     }
   }
 
+  // =========================================================================
+  // PORCENTAJES DE SELECCIÓN POR OPCIÓN (100% BASADOS EN RESPUESTAS REALES)
+  // =========================================================================
+  getLocalOptionStatsMap() {
+    try {
+      const raw = localStorage.getItem('caces_option_stats_v1');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') return parsed;
+      }
+    } catch (e) {}
+
+    // Reconstruir a partir del historial de simulacros previos si aún no existía el mapa
+    const initialMap = {};
+    try {
+      const history = this.getExamHistory();
+      history.forEach(h => {
+        if (h && h.respuestasUsuario && typeof h.respuestasUsuario === 'object') {
+          Object.entries(h.respuestasUsuario).forEach(([qId, optId]) => {
+            if (!qId || !optId) return;
+            const normOpt = String(optId).trim().toUpperCase();
+            if (!['A', 'B', 'C', 'D'].includes(normOpt)) return;
+            if (!initialMap[qId]) initialMap[qId] = { A: 0, B: 0, C: 0, D: 0 };
+            initialMap[qId][normOpt] = (initialMap[qId][normOpt] || 0) + 1;
+          });
+        }
+      });
+      if (Object.keys(initialMap).length > 0) {
+        localStorage.setItem('caces_option_stats_v1', JSON.stringify(initialMap));
+      }
+    } catch (e) {}
+
+    return initialMap;
+  }
+
+  getCloudOptionStatsMap() {
+    try {
+      const raw = localStorage.getItem('caces_cloud_option_stats_v1');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') return parsed;
+      }
+    } catch (e) {}
+    return {};
+  }
+
+  recordOptionSelection(questionId, optionId) {
+    if (!questionId || !optionId) return;
+    const normOpt = String(optionId).trim().toUpperCase();
+    if (!['A', 'B', 'C', 'D'].includes(normOpt)) return;
+
+    const map = this.getLocalOptionStatsMap();
+    if (!map[questionId]) {
+      map[questionId] = { A: 0, B: 0, C: 0, D: 0 };
+    }
+    map[questionId][normOpt] = (Number(map[questionId][normOpt]) || 0) + 1;
+
+    try {
+      localStorage.setItem('caces_option_stats_v1', JSON.stringify(map));
+    } catch (e) {
+      console.warn('Error guardando estadística de opción:', e);
+    }
+  }
+
+  mergeCloudOptionStats(incomingMap, isOwnBackup = false) {
+    if (!incomingMap || typeof incomingMap !== 'object') return;
+    const targetKey = isOwnBackup ? 'caces_option_stats_v1' : 'caces_cloud_option_stats_v1';
+    const current = isOwnBackup ? this.getLocalOptionStatsMap() : this.getCloudOptionStatsMap();
+
+    Object.entries(incomingMap).forEach(([qId, counts]) => {
+      if (!counts || typeof counts !== 'object') return;
+      if (!current[qId]) current[qId] = { A: 0, B: 0, C: 0, D: 0 };
+      ['A', 'B', 'C', 'D'].forEach(letter => {
+        const val = Number(counts[letter] || 0);
+        if (isOwnBackup) {
+          current[qId][letter] = Math.max(Number(current[qId][letter] || 0), val);
+        } else {
+          current[qId][letter] = (Number(current[qId][letter] || 0)) + val;
+        }
+      });
+    });
+
+    try {
+      localStorage.setItem(targetKey, JSON.stringify(current));
+    } catch (e) {}
+  }
+
+  async pullGlobalOptionStatsFromCloud() {
+    if (!this.supabaseClient || this._pulledGlobalOptionStats) return false;
+    this._pulledGlobalOptionStats = true;
+
+    try {
+      const { data, error } = await this.supabaseClient
+        .from('caces_simulacros')
+        .select('user_email, modo, desglose_especialidades')
+        .order('created_at', { ascending: false })
+        .limit(200);
+
+      if (error || !Array.isArray(data)) return false;
+
+      const myEmail = (this.getUserProfile()?.email || '').trim().toLowerCase();
+      const aggregatedOthers = {};
+      const seenUserSyncs = new Set();
+
+      data.forEach(row => {
+        const rowEmail = (row.user_email || '').trim().toLowerCase();
+        // Si es nuestro propio correo, ya está en nuestro mapa local (o se fusionó en pullUserProgressFromCloud)
+        if (myEmail && rowEmail === myEmail) return;
+
+        const desg = row.desglose_especialidades;
+        if (!desg || typeof desg !== 'object') return;
+
+        if (row.modo === '__PROFILE_SYNC__' && desg.optionStats && typeof desg.optionStats === 'object') {
+          const syncKey = rowEmail || `anon_${ Math.random() }`;
+          if (seenUserSyncs.has(syncKey)) return;
+          seenUserSyncs.add(syncKey);
+
+          Object.entries(desg.optionStats).forEach(([qId, counts]) => {
+            if (!counts || typeof counts !== 'object') return;
+            if (!aggregatedOthers[qId]) aggregatedOthers[qId] = { A: 0, B: 0, C: 0, D: 0 };
+            ['A', 'B', 'C', 'D'].forEach(l => {
+              aggregatedOthers[qId][l] += Number(counts[l] || 0);
+            });
+          });
+        } else if (desg._respuestasUsuario && typeof desg._respuestasUsuario === 'object') {
+          // Si este usuario aún no tiene un __PROFILE_SYNC__ con optionStats, sumar sus respuestas de simulacro
+          if (rowEmail && seenUserSyncs.has(rowEmail)) return;
+          Object.entries(desg._respuestasUsuario).forEach(([qId, optId]) => {
+            const normOpt = String(optId || '').trim().toUpperCase();
+            if (!['A', 'B', 'C', 'D'].includes(normOpt)) return;
+            if (!aggregatedOthers[qId]) aggregatedOthers[qId] = { A: 0, B: 0, C: 0, D: 0 };
+            aggregatedOthers[qId][normOpt] += 1;
+          });
+        }
+      });
+
+      localStorage.setItem('caces_cloud_option_stats_v1', JSON.stringify(aggregatedOthers));
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /**
+   * Devuelve los porcentajes reales de selección para una pregunta { total, counts, percentages }
+   * o null si aún no existen respuestas registradas en LocalStorage ni en Supabase.
+   */
+  getQuestionOptionStats(questionId) {
+    if (!questionId) return null;
+    const localMap = this.getLocalOptionStatsMap();
+    const cloudMap = this.getCloudOptionStatsMap();
+
+    const localCounts = localMap[questionId] || null;
+    const cloudCounts = cloudMap[questionId] || null;
+
+    if (!localCounts && !cloudCounts) return null;
+
+    const counts = {
+      A: Number(localCounts?.A || 0) + Number(cloudCounts?.A || 0),
+      B: Number(localCounts?.B || 0) + Number(cloudCounts?.B || 0),
+      C: Number(localCounts?.C || 0) + Number(cloudCounts?.C || 0),
+      D: Number(localCounts?.D || 0) + Number(cloudCounts?.D || 0)
+    };
+
+    const total = counts.A + counts.B + counts.C + counts.D;
+    if (total <= 0) return null;
+
+    // Calcular porcentajes exactos asegurando que sumen 100%
+    const letters = ['A', 'B', 'C', 'D'];
+    const rawPcts = letters.map(l => ({
+      letter: l,
+      exact: (counts[l] / total) * 100,
+      floored: Math.floor((counts[l] / total) * 100),
+      count: counts[l]
+    }));
+
+    let currentSum = rawPcts.reduce((acc, item) => acc + item.floored, 0);
+    let remainder = 100 - currentSum;
+
+    rawPcts
+      .slice()
+      .sort((a, b) => (b.exact - b.floored) - (a.exact - a.floored))
+      .forEach(item => {
+        if (remainder > 0 && item.count > 0) {
+          item.floored += 1;
+          remainder -= 1;
+        }
+      });
+
+    const percentages = {};
+    rawPcts.forEach(item => {
+      percentages[item.letter] = item.floored;
+    });
+
+    return {
+      total,
+      counts,
+      percentages
+    };
+  }
+
   /**
    * Registra el resultado de una pregunta en el banco de errores (La Morgue),
-   * y acumula en tiempo real las estadísticas de Modo Tutor y Ranking.
+   * y acumula en tiempo real las estadísticas de Modo Tutor, Ranking y Porcentajes de Selección.
    */
   registerAnswer(questionId, isCorrect, selectedOption = null, meta = {}) {
+    // Registrar la opción seleccionada para el cálculo de porcentajes de selección
+    const chosenOpt = meta.selectedOption || selectedOption;
+    if (chosenOpt && meta.isFirstAttempt !== false) {
+      this.recordOptionSelection(questionId, chosenOpt);
+    }
+
     let errors = this.getErrorBank();
     if (!isCorrect) {
       if (!errors[questionId]) {
@@ -1273,6 +1527,11 @@ class StorageManager {
   }
 
   async clearDatabase() {
+    if (!this.isAdminAuthorized()) {
+      console.warn("Operación bloqueada: Solo el administrador puede vaciar la base de datos.");
+      return false;
+    }
+    this._cachedQuestions = [];
     localStorage.removeItem('caces_custom_questions');
     localStorage.removeItem('caces_questions');
     localStorage.removeItem('custom_questions');
@@ -1288,9 +1547,15 @@ class StorageManager {
         console.warn("Error borrando preguntas de Supabase:", e);
       }
     }
+    return true;
   }
 
   async resetAll() {
+    if (!this.isAdminAuthorized()) {
+      console.warn("Operación bloqueada: Solo el administrador puede restablecer la base de datos.");
+      return false;
+    }
+    this._cachedQuestions = [];
     localStorage.removeItem('caces_custom_questions');
     localStorage.removeItem('caces_questions');
     localStorage.removeItem('custom_questions');
@@ -1310,6 +1575,7 @@ class StorageManager {
         console.warn("Error borrando de Supabase:", e);
       }
     }
+    return true;
   }
 
   getErrorBank() {

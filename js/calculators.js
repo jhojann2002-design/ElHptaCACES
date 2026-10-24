@@ -41,7 +41,7 @@ export class ClinicalCalculators {
     if (pad <= 50) sPad = 3;
     else if (pad >= 51 && pad <= 59) sPad = 1;
     else if (pad >= 60 && pad <= 89) sPad = 0;
-    else if (pad >= 90 && pad <= 109) sPas = 2;
+    else if (pad >= 90 && pad <= 109) sPad = 2;
     else if (pad >= 110) sPad = 3;
     score += sPad;
     if (sPad > 0) details.push(`PA Diastólica (${pad} mmHg): +${sPad}`);

@@ -456,19 +456,16 @@ export class ExamEngine {
     if (isFirstClickOnQuestion) {
       this.firstAttemptByQuestion[currentQ.id] = optionId;
       const isCorrectFirst = optionId === currentQ.correcta;
-      Storage.registerAnswer(currentQ.id, isCorrectFirst, isCorrectFirst ? null : optionId, {
-        specialty: currentQ.especialidad || 'Medicina Interna',
-        mode: this.mode,
-        isFirstAttempt: true
-      });
+      if (this.mode !== 'caces') {
+        Storage.registerAnswer(currentQ.id, isCorrectFirst, isCorrectFirst ? null : optionId, {
+          specialty: currentQ.especialidad || 'Medicina Interna',
+          mode: this.mode,
+          isFirstAttempt: true,
+          selectedOption: optionId
+        });
+      }
     } else if (this.mode === 'caces' && prevSelected !== optionId) {
       // En modo simulador cerrado el usuario puede cambiar su respuesta antes de entregar
-      const isCorrectNow = optionId === currentQ.correcta;
-      Storage.registerAnswer(currentQ.id, isCorrectNow, isCorrectNow ? null : optionId, {
-        specialty: currentQ.especialidad || 'Medicina Interna',
-        mode: 'caces',
-        isFirstAttempt: false
-      });
     } else if (this.mode !== 'caces') {
       // En modo tutor / La Morgue: una vez respondida, la pregunta queda bloqueada
       return { isFirstClickOnQuestion: false, isFirstClickCorrect: false, changed: false };
@@ -580,10 +577,25 @@ export class ExamEngine {
       } else if (selected === q.correcta) {
         correct++;
         specialtyStats[spec].correct++;
+        if (this.mode === 'caces') {
+          Storage.registerAnswer(q.id, true, null, {
+            specialty: spec,
+            mode: 'caces',
+            isFirstAttempt: true,
+            selectedOption: selected
+          });
+        }
       } else {
         incorrect++;
         specialtyStats[spec].incorrect++;
-        Storage.registerAnswer(q.id, false, selected);
+        if (this.mode === 'caces') {
+          Storage.registerAnswer(q.id, false, selected, {
+            specialty: spec,
+            mode: 'caces',
+            isFirstAttempt: true,
+            selectedOption: selected
+          });
+        }
       }
     });
 
