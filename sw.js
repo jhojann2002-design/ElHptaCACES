@@ -1,4 +1,4 @@
-const CACHE_NAME = 'caces-medprep-v7';
+const CACHE_NAME = 'caces-medprep-v10';
 const CORE_ASSETS = [
   './',
   './index.html',
@@ -45,21 +45,39 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   const req = event.request;
-  // Solo interceptar peticiones GET
   if (req.method !== 'GET') return;
+
+  const url = new URL(req.url);
+  const isCodeOrMarkup =
+    req.mode === 'navigate' ||
+    url.pathname.endsWith('.html') ||
+    url.pathname.endsWith('.js') ||
+    url.pathname.endsWith('.css');
+
+  if (isCodeOrMarkup) {
+    event.respondWith(
+      fetch(req)
+        .then((networkResp) => {
+          if (networkResp && networkResp.status === 200) {
+            const respClone = networkResp.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(req, respClone));
+          }
+          return networkResp;
+        })
+        .catch(() => caches.match(req))
+    );
+    return;
+  }
 
   event.respondWith(
     caches.match(req).then((cachedResp) => {
-      // Si está en caché, devolverlo y actualizar en segundo plano (stale-while-revalidate)
       const fetchPromise = fetch(req).then((networkResp) => {
         if (networkResp && networkResp.status === 200) {
           const respClone = networkResp.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(req, respClone));
         }
         return networkResp;
-      }).catch(() => {
-        // En modo offline, el fetch fallará y se usará la copia en caché
-      });
+      }).catch(() => {});
 
       return cachedResp || fetchPromise;
     })
