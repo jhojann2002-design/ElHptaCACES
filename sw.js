@@ -1,4 +1,4 @@
-const CACHE_NAME = 'caces-medprep-v17-pov-uleam';
+const CACHE_NAME = 'caces-medprep-v18-realistic-360';
 const CORE_ASSETS = [
   './',
   './index.html',
@@ -57,7 +57,7 @@ self.addEventListener('fetch', (event) => {
 
   if (isCodeOrMarkup) {
     const cleanUrl = (url.pathname.endsWith('/games.js') || url.pathname.endsWith('/app.js'))
-      ? `${url.origin}${url.pathname}?v=17`
+      ? `${url.origin}${url.pathname}?v=18`
       : req.url;
 
     event.respondWith(
