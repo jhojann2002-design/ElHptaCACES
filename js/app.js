@@ -6,7 +6,7 @@ import { Analytics } from './analytics.js';
 import { Flashcards } from './flashcards.js';
 import { ClinicalCalculators } from './calculators.js';
 import { aiTutor } from './ai-tutor.js';
-import { ArcadeManager } from './games.js?v=10';
+import { ArcadeManager } from './games.js?v=16';
 
 /**
  * Biblioteca de Vectores Minimalistas SVG (Cero Emojis)
