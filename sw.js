@@ -1,4 +1,5 @@
-const CACHE_NAME = 'caces-medprep-v21-threejs-faces';
+```javascript
+const CACHE_NAME = 'caces-medprep-v22-distinct-faces-clean-pov';
 const CORE_ASSETS = [
   './',
   './index.html',
@@ -58,7 +59,7 @@ self.addEventListener('fetch', (event) => {
 
   if (isCodeOrMarkup) {
     const cleanUrl = (url.pathname.endsWith('/games.js') || url.pathname.endsWith('/app.js'))
-      ? `${url.origin}${url.pathname}?v=21`
+      ? `${url.origin}${url.pathname}?v=22`
       : req.url;
 
     event.respondWith(
