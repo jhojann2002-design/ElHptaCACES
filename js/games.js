@@ -1,22 +1,24 @@
 /**
- * MOTOR ARCADE EHEP 3D - EL HPTA CACES (VERSIÓN v18: MOTOR 3D REALISTA + CÁMARA LIBRE 360° + SOMBRAS DIRECCIONALES + GUARDIANES + ROSTROS)
+ * MOTOR ARCADE EHEP 3D - EL HPTA CACES (VERSIÓN v19: MOTOR THREE.JS / WEBGL REAL + SOMBRAS DINÁMICAS + CARPA CIRCENSE + META CACES)
  * Incluye 2 Juegos Oficiales de Alto Rendimiento:
- *   1. El Puente de Cristal CACES (#456, #058, #100):
- *      - Lente Gran Angular POV + Cámara Interactiva 360° (arrastra con el dedo/mouse o usa el botón
- *        "👀 Mirar Atrás" para voltear 180° y ver a los jugadores #058 y #100 detrás de ti, mirar arriba
- *        al techo/luces o abajo al abismo).
- *      - Salto POV con aterrizaje exacto sobre el peldaño elegido (mirando tus pies sobre el vidrio
- *        con espesor 3D y abrazaderas metálicas, y levantando luego la vista al frente).
- *      - Plataforma de Salida real al inicio del Peldaño 1 (con franja de peligro amarilla/negra y pórtico)
- *        y Plataforma de Meta al final con los 3 Guardianes Rosas 3D (○ △ □) armados y arco neón.
- *      - Entorno 3D completo: Techo abovedado con vigas de acero, lámparas colgantes y reflectores
- *        volumétricos, cortinajes del coliseo y abismo profundo con pilares estructurales y niebla.
- *      - Sombras direccionales en tiempo real proyectadas geométricamente (ray-plane intersection)
- *        desde los reflectores superiores sobre la plataforma y los cristales (cero elipses falsas).
- *      - Jugadores 3D realistas con rostro detallado (ojos con iris/pupilas y parpadeo, cejas, nariz,
- *        boca animada cuando hablan, cabello, uniforme con cierre y pliegues, y manos con 5 dedos).
- *      - Diálogos máximo 1 vez por peldaño (ULEAM "todo D de Diosito", rural, primer semestre,
- *        tirar la canica, comodín 50/50, y monólogo POV en la última vida).
+ *   1. El Puente de Cristal CACES (#456, #058, #100) con Motor Three.js / WebGL:
+ *      - Corrección de Cámara (Eje Y Invertido + Damping Suave): Deslizar hacia arriba inclina la cámara
+ *        hacia abajo y deslizar hacia abajo la inclina hacia arriba, con amortiguación exponencial suave
+ *        y rotación 360° para ver todo el entorno o voltear a ver a los jugadores de atrás.
+ *      - Sombras e Iluminación Realista (WebGL PCFSoftShadowMap): Sombras dinámicas reales (castShadow /
+ *        receiveShadow) proyectadas sobre los paneles de vidrio semitransparentes y reflectantes,
+ *        bombillas esféricas de luz cálida a los costados de las vigas rosadas y reflectores superiores
+ *        con haces de luz volumétrica apuntando hacia la pasarela.
+ *      - Rediseño de Jugadores 3D (NPCs #058, #100, #456): Mallas 3D proporcionadas y articuladas con
+ *        chándal verde, cierre frontal blanco, camiseta interior blanca visible en el cuello, franjas
+ *        blancas laterales en mangas y piernas, manos con 5 dedos, rostro 3D detallado y animaciones
+ *        de tensión / agachado en equilibrio sobre el cristal.
+ *      - Entorno y Escenario: Carpa circense superior dividida en secciones rojas, verdes y moradas
+ *        bordeadas por tiras de luces cálidas, candelabro clásico dorado colgante en el centro y
+ *        cortinas plisadas de terciopelo rojo rodeando las paredes del abismo.
+ *      - Meta Imponente (META CACES): Arco iluminado por luces de marquesina de colores, puertas dobles
+ *        ornamentadas al fondo, postes dorados con cordones de terciopelo azul y los 3 guardias de traje
+ *        rosa (○ △ □) con modelado mejorado e iluminación de contorno dramática (rim lighting).
  *   2. Ahorcado Clínico MSP (Diagnósticos, Fármacos de Elección y Epónimos CACES)
  *   + Ranking Top Arcade en Vivo con Cuentas y Fotos Reales de Google (Supabase).
  */
@@ -42,7 +44,7 @@ const SVG_ICONS = {
 export class ArcadeManager {
   constructor(formatMarkdownFn) {
     this.formatMd = formatMarkdownFn || ((t) => t);
-    this.currentMode = 'bridge'; // 'bridge' | 'hangman'
+    this.currentMode = 'bridge';
     this.leaderboardTab = 'streak';
     this.sfxEnabled = localStorage.getItem('caces_sfx') !== 'off';
     this.audioCtx = null;
@@ -65,11 +67,15 @@ export class ArcadeManager {
     this.isSpeakingNow = false;
     this.questionsPool = [];
     this._audioUnlockBound = false;
-    this.bindMobileAudioUnlock();
 
-    // =========================================================================
-    // BANCO DE TÉRMINOS CLÍNICOS PARA EL AHORCADO MSP (ALTO RENDIMIENTO CACES)
-    // =========================================================================
+    // Instancias Three.js / WebGL
+    this.threeLoaded = Boolean(typeof window !== 'undefined' && window.THREE);
+    this.threeLoadingPromise = null;
+    this.threeCtx = null;
+
+    this.bindMobileAudioUnlock();
+    this.ensureThreeJSLoaded();
+
     this.hangmanDictionary = [
       {
         word: 'SULFATO DE MAGNESIO',
@@ -200,6 +206,41 @@ export class ArcadeManager {
     ];
   }
 
+  /**
+   * Carga automáticamente Three.js r128 desde Cloudflare CDN si aún no está presente en window.THREE
+   */
+  ensureThreeJSLoaded() {
+    if (typeof window === 'undefined') return Promise.resolve(false);
+    if (window.THREE) {
+      this.threeLoaded = true;
+      return Promise.resolve(true);
+    }
+    if (this.threeLoadingPromise) return this.threeLoadingPromise;
+
+    this.threeLoadingPromise = new Promise((resolve) => {
+      const existing = document.querySelector('script[data-threejs-cdn="true"]');
+      if (existing) {
+        existing.addEventListener('load', () => {
+          this.threeLoaded = Boolean(window.THREE);
+          resolve(this.threeLoaded);
+        });
+        existing.addEventListener('error', () => resolve(false));
+        return;
+      }
+      const script = document.createElement('script');
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';
+      script.async = true;
+      script.setAttribute('data-threejs-cdn', 'true');
+      script.onload = () => {
+        this.threeLoaded = Boolean(window.THREE);
+        resolve(this.threeLoaded);
+      };
+      script.onerror = () => resolve(false);
+      document.head.appendChild(script);
+    });
+    return this.threeLoadingPromise;
+  }
+
   renderLivesHearts(livesCount, maxLives = 3) {
     const safeLives = Math.max(0, Math.min(maxLives, livesCount));
     let html = '<span class="inline-flex items-center gap-0.5">';
@@ -248,9 +289,20 @@ export class ArcadeManager {
       if (footerEl) footerEl.style.display = '';
       if (rankPanel) rankPanel.style.display = '';
       if (selectorGrid) selectorGrid.style.display = '';
+      this.disposeThreeJSScene();
       const portal = document.getElementById('bridge-fullscreen-portal');
       if (portal) portal.remove();
     }
+  }
+
+  disposeThreeJSScene() {
+    if (!this.threeCtx) return;
+    try {
+      if (this.threeCtx.renderer) {
+        this.threeCtx.renderer.dispose();
+      }
+    } catch (e) {}
+    this.threeCtx = null;
   }
 
   bindMobileAudioUnlock() {
@@ -878,9 +930,6 @@ export class ArcadeManager {
     }
   }
 
-  // =========================================================================
-  // INICIALIZACIÓN DEL HUB ARCADE (2 JUEGOS + TOP RANKING GOOGLE)
-  // =========================================================================
   async initArcade(questionsPool = []) {
     if (Array.isArray(questionsPool) && questionsPool.length > 0) {
       this.questionsPool = questionsPool;
@@ -902,7 +951,7 @@ export class ArcadeManager {
     const modes = [
       {
         id: 'bridge',
-        badge: '○ △ □ • POV 3D REALISTA 360°',
+        badge: '○ △ □ • THREE.JS WEBGL 3D',
         badgeClass: 'bg-rose-500/15 text-rose-500 border border-rose-500/30',
         activeBorder: 'border-2 border-rose-500 ring-2 ring-rose-500/20',
         imgSrc: 'assets/juego-puente-cristal.png',
@@ -910,7 +959,7 @@ export class ArcadeManager {
         imgClass: 'w-full h-full object-cover',
         title: '1. El Puente de Cristal (#456)',
         shortTitle: 'Puente de Cristal',
-        desc: 'Cámara POV 360° con techo, abismo, guardianes ○△□, sombras reales y rostros 3D.',
+        desc: 'Escena Three.js WebGL con sombras reales, carpa circense, candelabro y META CACES.',
         statsLabel: `Racha Máx: ${Math.max(arcStats.bridgeBestStreak || 0, arcStats.bridgeBestStep || 0)} • Puentes: ${arcStats.bridgeWins || 0}`
       },
       {
@@ -974,9 +1023,6 @@ export class ArcadeManager {
     }
   }
 
-  // =========================================================================
-  // JUEGO 1: EL PUENTE DE CRISTAL 3D (REALISTA + CÁMARA 360° + SOMBRAS DIRECCIONALES + GUARDIANES)
-  // =========================================================================
   getGlassBridgeQuestions(count = 12) {
     const fallbackQuestions = [
       {
@@ -1226,17 +1272,14 @@ export class ArcadeManager {
         introStartTime: now,
         introDuration: 2250,
 
-        // Posición 3D de la cámara con soporte de rotación libre de 360° (Yaw + Pitch)
-        // Al empezar en Peldaño 1, el jugador #456 está parado en la Plataforma de Salida (row = -1.18)
-        // detrás de la franja de peligro amarilla/negra para que se vea claramente que está por iniciar el puente.
         cameraRow: -2.85,
         cameraLane: 1.5,
         cameraY: 1.62,
-        cameraPitch: 0.12,
+        cameraPitch: 0.14,
         cameraYaw: 0,
         cameraRoll: 0,
 
-        // Rotación libre controlada por el usuario (arrastrando la pantalla o con el botón Mirar Atrás)
+        // Amortiguación suave (damping) en ambos ejes con eje Y invertido
         userYaw: 0,
         targetUserYaw: 0,
         userPitch: 0,
@@ -1248,12 +1291,10 @@ export class ArcadeManager {
         dragBaseYaw: 0,
         dragBasePitch: 0,
 
-        // Posición lógica del jugador activo en POV
         playerNumber: leadNum,
         playerRow: -1.18,
         playerLane: 1.5,
 
-        // Interpolación de salto en POV
         jumpStartTime: 0,
         jumpDuration: 600,
         jumpStartRow: -1.18,
@@ -1271,14 +1312,6 @@ export class ArcadeManager {
         shards: [],
         shockwaves: [],
         marbleAnim: null,
-        dustMotes: Array.from({ length: 34 }, () => ({
-          x: (Math.random() - 0.5) * 9,
-          y: -4.0 + Math.random() * 8.5,
-          z: -2 + Math.random() * 16,
-          r: 0.9 + Math.random() * 1.9,
-          speed: 0.002 + Math.random() * 0.004,
-          phase: Math.random() * Math.PI * 2
-        })),
         screenShake: 0,
         hoveredLane: -1,
         tileHitRegions: [],
@@ -1288,6 +1321,11 @@ export class ArcadeManager {
 
     this.setExternalPageChromeHidden(true);
     this.renderGlassBridgeLayout();
+    this.ensureThreeJSLoaded().then((loaded) => {
+      if (loaded && this.bridgeState && this.bridgeState.isFullscreenOpen) {
+        this.initThreeJSBridgeScene();
+      }
+    });
     this.startGlassBridgeRenderLoop();
     this.startAmbientSound('bridge');
     this.scheduleSingleStepDialogue(2450);
@@ -1305,9 +1343,6 @@ export class ArcadeManager {
     });
   }
 
-  /**
-   * Alterna entre mirar hacia atrás (180° para ver a #058 y #100 con sus caras 3D) y mirar hacia adelante (0°)
-   */
   toggleLookBehindCamera() {
     const st = this.bridgeState;
     if (!st || !st.anim) return;
@@ -1321,7 +1356,7 @@ export class ArcadeManager {
       anim.targetUserPitch = 0;
     } else {
       anim.targetUserYaw = Math.PI;
-      anim.targetUserPitch = 0.06;
+      anim.targetUserPitch = 0.08;
     }
     this.playTone('click');
     this.updateLookBehindButtonUI();
@@ -1680,6 +1715,11 @@ export class ArcadeManager {
     this.setExternalPageChromeHidden(true);
     this.playTone('popup_open');
     this.renderGlassBridgeLayout();
+    this.ensureThreeJSLoaded().then((loaded) => {
+      if (loaded && this.bridgeState && this.bridgeState.isFullscreenOpen) {
+        this.initThreeJSBridgeScene();
+      }
+    });
   }
 
   renderGlassBridgeLayout() {
@@ -1698,7 +1738,7 @@ export class ArcadeManager {
               ○ △ □ • EL PUENTE DE CRISTAL #456 (PAUSADO EN PELDAÑO ${st.globalStepOffset + st.currentStep + 1})
             </div>
             <h3 class="font-display font-extrabold text-lg sm:text-xl text-white">
-              Modo Inmersivo en Pantalla Completa (${st.lives} ${st.lives === 1 ? 'jugador vivo' : 'jugadores vivos'})
+              Escena Three.js WebGL en Pantalla Completa (${st.lives} ${st.lives === 1 ? 'jugador vivo' : 'jugadores vivos'})
             </h3>
             <p class="font-mono text-xs text-slate-400">
               Racha actual: <b class="text-emerald-400">${st.streak} vidrios</b> • Récord Máx: <b class="text-amber-400">${maxGlassStreak} vidrios</b> • Puentes logrados: <b class="text-emerald-400">${arcStats.bridgeWins || 0}</b>
@@ -1731,9 +1771,12 @@ export class ArcadeManager {
 
     portal.className = 'fixed inset-0 z-[9999] w-screen h-[100dvh] bg-[#08020f] flex flex-col justify-between overflow-hidden select-none';
     portal.innerHTML = `
-      <!-- MITAD SUPERIOR: VISOR 3D REALISTA GRAN ANGULAR CON CÁMARA LIBRE 360° -->
-      <div id="bridge-3d-canvas-wrap" class="relative w-full h-[40dvh] min-h-[205px] max-h-[410px] sm:h-[45dvh] shrink-0 overflow-hidden bg-[#06020c] touch-none">
-        <canvas id="squid-bridge-canvas" class="w-full h-full block cursor-grab active:cursor-grabbing" width="880" height="460"></canvas>
+      <!-- MITAD SUPERIOR: VISOR THREE.JS WEBGL 3D REALISTA CON SOMBRAS DINÁMICAS Y CÁMARA 360° -->
+      <div id="bridge-3d-canvas-wrap" class="relative w-full h-[42dvh] min-h-[215px] max-h-[430px] sm:h-[46dvh] shrink-0 overflow-hidden bg-[#06020c] touch-none">
+        <!-- Contenedor WebGL Three.js -->
+        <div id="squid-threejs-mount" class="absolute inset-0 w-full h-full cursor-grab active:cursor-grabbing"></div>
+        <!-- Canvas auxiliar / fallback para HUD 3D e interacción -->
+        <canvas id="squid-bridge-canvas" class="absolute inset-0 w-full h-full block cursor-grab active:cursor-grabbing pointer-events-auto" width="880" height="460"></canvas>
 
         <!-- Barra Superior dentro del Visor 3D -->
         <div class="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between gap-1.5 z-10 pointer-events-none">
@@ -1766,10 +1809,10 @@ export class ArcadeManager {
         <!-- Globo de Diálogo (Máximo 1 vez por peldaño) -->
         <div id="bridge-back-player-chatter-wrap" class="absolute top-12 left-2.5 right-2.5 z-20 pointer-events-none"></div>
 
-        <!-- Barra Inferior del Visor 3D: Estado POV + Botón para Voltear 180° a ver a los Jugadores de Atrás -->
+        <!-- Barra Inferior del Visor 3D -->
         <div class="absolute bottom-2 left-2.5 right-2.5 flex items-center justify-between gap-2 pointer-events-none z-10">
           <span id="bridge-pov-camera-badge" class="px-2.5 py-1 rounded-xl bg-slate-950/88 border border-cyan-500/45 text-cyan-300 font-mono text-[9px] sm:text-[10px] font-bold backdrop-blur-sm shadow truncate">
-            🖐️ Arrastra para mirar 360° (Techo, Abismo, Guardianes y Atrás)
+            🖐️ Arrastra para mirar 360° (Carpa, Candelabro, META CACES y Atrás)
           </span>
           <button type="button" id="btn-bridge-look-behind" class="pointer-events-auto px-2.5 py-1 rounded-xl bg-slate-950/90 hover:bg-slate-900 text-amber-300 border border-amber-400/60 font-mono text-[10px] sm:text-xs font-extrabold shadow-lg cursor-pointer active:scale-95 flex items-center gap-1 shrink-0">
             <span>👀 Voltear a ver Atrás (#058/#100)</span>
@@ -1801,11 +1844,16 @@ export class ArcadeManager {
 
     this.bindBridgeCanvasEvents();
     this.updateGlassBridgeDOM();
+    if (window.THREE) {
+      this.initThreeJSBridgeScene();
+    }
   }
 
   /**
-   * Vincula el control interactivo 360° (arrastrar con el dedo o con el mouse sobre el visor 3D)
-   * para mirar el techo, las luces, el abismo, los guardianes en la meta o voltear 180° a ver a los jugadores de atrás.
+   * Control de cámara 360° con EJE Y INVERTIDO según especificación:
+   * - Deslizar hacia arriba (dy < 0) inclina la cámara hacia abajo (targetUserPitch aumenta).
+   * - Deslizar hacia abajo (dy > 0) inclina la cámara hacia arriba (targetUserPitch disminuye).
+   * - Amortiguación exponencial suave (damping) en updateBridgePhysics.
    */
   bindBridgeCanvasEvents() {
     const canvas = document.getElementById('squid-bridge-canvas');
@@ -1819,8 +1867,8 @@ export class ArcadeManager {
       return {
         clientX,
         clientY,
-        x: (clientX - rect.left) * (canvas.width / rect.width),
-        y: (clientY - rect.top) * (canvas.height / rect.height)
+        x: (clientX - rect.left) * (canvas.width / Math.max(1, rect.width)),
+        y: (clientY - rect.top) * (canvas.height / Math.max(1, rect.height))
       };
     };
 
@@ -1865,9 +1913,11 @@ export class ArcadeManager {
         if (Math.hypot(dx, dy) > 6) {
           st.anim.dragMoved = true;
         }
-        // Rotación libre de 360° en horizontal (Yaw) y de -50° a +55° en vertical (Pitch)
+        // Rotación horizontal 360° + EJE Y INVERTIDO (-dy):
+        // Deslizar hacia arriba (dy < 0) aumenta targetUserPitch (inclina la cámara hacia abajo);
+        // Deslizar hacia abajo (dy > 0) disminuye targetUserPitch (inclina la cámara hacia arriba).
         st.anim.targetUserYaw = st.anim.dragBaseYaw - dx * 0.0085;
-        st.anim.targetUserPitch = Math.max(-0.78, Math.min(0.82, st.anim.dragBasePitch + dy * 0.0065));
+        st.anim.targetUserPitch = Math.max(-0.85, Math.min(0.88, st.anim.dragBasePitch - dy * 0.0068));
         this.updateLookBehindButtonUI();
         return;
       }
@@ -2003,7 +2053,7 @@ export class ArcadeManager {
       const mode = st.anim.camMode;
       if (mode === 'INTRO_SQUAD') {
         povBadge.className = 'px-2.5 py-1 rounded-xl bg-emerald-950/90 border border-emerald-400/60 text-emerald-300 font-mono text-[9px] sm:text-[10px] font-black backdrop-blur-sm shadow truncate';
-        povBadge.textContent = '🎬 PLATAFORMA DE SALIDA: #456 • #058 • #100';
+        povBadge.textContent = '🎬 ESCENA THREE.JS: #456 • #058 • #100 EN PLATAFORMA';
       } else if (mode === 'POV_JUMPING') {
         povBadge.className = 'px-2.5 py-1 rounded-xl bg-cyan-950/90 border border-cyan-400 text-cyan-200 font-mono text-[9px] sm:text-[10px] font-black backdrop-blur-sm shadow truncate';
         povBadge.textContent = `👁️ POV #${st.anim.playerNumber} • CAYENDO EN EL PELDAÑO Y MIRANDO A LOS PIES...`;
@@ -2024,7 +2074,7 @@ export class ArcadeManager {
         povBadge.textContent = `👁️ POV #${st.anim.playerNumber} • SALTANDO AL VIDRIO TEMPLADO SEGURO`;
       } else {
         povBadge.className = 'px-2.5 py-1 rounded-xl bg-slate-950/88 border border-emerald-500/50 text-emerald-300 font-mono text-[9px] sm:text-[10px] font-bold backdrop-blur-sm shadow truncate';
-        povBadge.textContent = `👁️ POV #${st.anim.playerNumber} • Arrastra el visor 3D para mirar alrededor o atrás`;
+        povBadge.textContent = `👁️ POV #${st.anim.playerNumber} • Desliza para mirar 360° (Carpa, Candelabro, META CACES y Atrás)`;
       }
     }
 
@@ -2032,7 +2082,7 @@ export class ArcadeManager {
       if (st.awaitingNextStep) {
         canvasWrap.className = 'relative w-full h-[32dvh] min-h-[175px] max-h-[300px] sm:h-[36dvh] shrink-0 overflow-hidden bg-[#06020c] transition-all duration-200 touch-none';
       } else {
-        canvasWrap.className = 'relative w-full h-[40dvh] min-h-[205px] max-h-[410px] sm:h-[45dvh] shrink-0 overflow-hidden bg-[#06020c] transition-all duration-200 touch-none';
+        canvasWrap.className = 'relative w-full h-[42dvh] min-h-[215px] max-h-[430px] sm:h-[46dvh] shrink-0 overflow-hidden bg-[#06020c] transition-all duration-200 touch-none';
       }
     }
 
@@ -2051,7 +2101,7 @@ export class ArcadeManager {
                 ${st.isVictory ? `★ PUENTE NIVEL ${st.bridgeLevel} COMPLETADO` : '✕ LOS 3 JUGADORES CAYERON AL ABISMO'}
               </span>
               <h3 class="font-display font-black text-2xl sm:text-3xl text-white">
-                ${st.isVictory ? '¡Llegaste a la Meta con los Guardianes!' : '¡Fin de la Partida en el Puente!'}
+                ${st.isVictory ? '¡Cruzaste las Puertas de META CACES!' : '¡Fin de la Partida en el Puente!'}
               </h3>
               <p class="text-xs sm:text-sm text-slate-300 leading-relaxed">
                 ${st.isVictory
@@ -2109,7 +2159,7 @@ export class ArcadeManager {
                 </div>
               </div>
               <button type="button" id="btn-bridge-next-step" class="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 font-display font-black text-xs uppercase tracking-wider shadow-lg cursor-pointer shrink-0">
-                ${isLastStep ? '🏆 Cruzar a la Meta con los Guardianes →' : 'Siguiente Peldaño →'}
+                ${isLastStep ? '🏆 Cruzar a META CACES →' : 'Siguiente Peldaño →'}
               </button>
             </div>
 
@@ -2267,7 +2317,6 @@ export class ArcadeManager {
     st.lastChosenOptionId = chosenOptionId;
     st.anim.hoveredLane = -1;
 
-    // Al saltar, centrar la vista hacia adelante automáticamente
     st.anim.targetUserYaw = 0;
     st.anim.targetUserPitch = 0;
     st.anim.activeChatter = null;
@@ -2278,7 +2327,7 @@ export class ArcadeManager {
     st.anim.jumpDuration = 600;
     st.anim.jumpStartRow = st.anim.playerRow;
     st.anim.jumpStartLane = st.anim.playerLane;
-    st.anim.jumpTargetRow = st.currentStep; // Aterriza EXACTAMENTE en el centro del peldaño elegido
+    st.anim.jumpTargetRow = st.currentStep;
     st.anim.jumpTargetLane = laneIdx;
     st.anim.jumpWillBreak = !isCorrect;
     st.anim.jumpChosenId = chosenOptionId;
@@ -2561,7 +2610,7 @@ export class ArcadeManager {
   }
 
   // =========================================================================
-  // MOTOR DE FÍSICAS, PROYECCIÓN 360° Y SOMBRAS DIRECCIONALES EN TIEMPO REAL
+  // MOTOR DE FÍSICAS + THREE.JS WEBGL 3D REAL CON SOMBRAS DINÁMICAS
   // =========================================================================
   startGlassBridgeRenderLoop() {
     const loop = (now) => {
@@ -2570,7 +2619,11 @@ export class ArcadeManager {
       if (canvas && this.bridgeState && this.bridgeState.isFullscreenOpen) {
         this.resizeBridgeCanvasIfNeeded(canvas);
         this.updateBridgePhysics(now);
-        this.drawGlassBridge3DScene(canvas, now);
+        if (window.THREE && this.threeCtx) {
+          this.renderThreeJSBridgeFrame(canvas, now);
+        } else if (window.THREE && !this.threeCtx) {
+          this.initThreeJSBridgeScene();
+        }
       }
       this.activeRaf = requestAnimationFrame(loop);
     };
@@ -2586,6 +2639,11 @@ export class ArcadeManager {
     if (Math.abs(canvas.width - targetW) > 4 || Math.abs(canvas.height - targetH) > 4) {
       canvas.width = targetW;
       canvas.height = targetH;
+      if (this.threeCtx && this.threeCtx.renderer && this.threeCtx.camera) {
+        this.threeCtx.renderer.setSize(rect.width, rect.height, false);
+        this.threeCtx.camera.aspect = rect.width / Math.max(1, rect.height);
+        this.threeCtx.camera.updateProjectionMatrix();
+      }
     }
   }
 
@@ -2600,11 +2658,10 @@ export class ArcadeManager {
       anim.screenShake = 0;
     }
 
-    // Suavizado de la rotación libre 360° del usuario (Yaw + Pitch)
-    anim.userYaw += (anim.targetUserYaw - anim.userYaw) * 0.18;
-    anim.userPitch += (anim.targetUserPitch - anim.userPitch) * 0.18;
+    // Damping suave exponencial (amortiguación de cámara)
+    anim.userYaw += (anim.targetUserYaw - anim.userYaw) * 0.12;
+    anim.userPitch += (anim.targetUserPitch - anim.userPitch) * 0.12;
 
-    // 1. PLANO INICIAL ('INTRO_SQUAD') mostrando la Plataforma de Salida con #456, #058 y #100
     if (anim.camMode === 'INTRO_SQUAD') {
       const elapsed = Math.max(0, now - anim.introStartTime);
       const t = Math.min(1, elapsed / anim.introDuration);
@@ -2632,20 +2689,14 @@ export class ArcadeManager {
         anim.cameraYaw = 0;
         this.updateGlassBridgeDOM();
       }
-    }
-
-    // 2. MODO POV LISTO PARA SALTAR ('POV_READY') + CÁMARA LIBRE 360°
-    else if (anim.camMode === 'POV_READY') {
-      anim.cameraRow += (anim.playerRow - anim.cameraRow) * 0.18;
-      anim.cameraLane += (anim.playerLane - anim.cameraLane) * 0.18;
+    } else if (anim.camMode === 'POV_READY') {
+      anim.cameraRow += (anim.playerRow - anim.cameraRow) * 0.16;
+      anim.cameraLane += (anim.playerLane - anim.cameraLane) * 0.16;
       anim.cameraY = 1.24 + Math.sin(now * 0.0035) * 0.015;
       anim.cameraPitch = 0.16 + anim.userPitch;
       anim.cameraYaw = anim.userYaw;
       anim.cameraRoll *= 0.8;
-    }
-
-    // 3. SALTO EN PRIMERA PERSONA CAYENDO EXACTAMENTE EN EL PELDAÑO Y MIRANDO A LOS PIES ('POV_JUMPING' / 'POV_RELAY_JUMP')
-    else if (anim.camMode === 'POV_JUMPING' || anim.camMode === 'POV_RELAY_JUMP') {
+    } else if (anim.camMode === 'POV_JUMPING' || anim.camMode === 'POV_RELAY_JUMP') {
       const elapsed = Math.max(0, now - anim.jumpStartTime);
       const t = Math.min(1, elapsed / anim.jumpDuration);
       const easeT = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
@@ -2662,7 +2713,7 @@ export class ArcadeManager {
       } else {
         const lookDownT = (t - 0.28) / 0.72;
         const smoothDown = lookDownT < 0.5 ? 2 * lookDownT * lookDownT : 1 - Math.pow(-2 * lookDownT + 2, 2) / 2;
-        anim.cameraPitch = 0.34 + smoothDown * 0.72; // 1.06 rad (~61° mirando directo a tus pies sobre el vidrio)
+        anim.cameraPitch = 0.34 + smoothDown * 0.72;
       }
 
       if (t >= 1 && anim.camMode === 'POV_JUMPING') {
@@ -2674,10 +2725,7 @@ export class ArcadeManager {
         anim.cameraPitch = 1.06;
         this.onPOVJumpLanded();
       }
-    }
-
-    // 4. MIRANDO TUS PIES EN EL VIDRIO TEMPLADO Y LUEGO LEVANTANDO LA VISTA AL FRENTE ('POV_FLOOR_CHECK_SAFE')
-    else if (anim.camMode === 'POV_FLOOR_CHECK_SAFE') {
+    } else if (anim.camMode === 'POV_FLOOR_CHECK_SAFE') {
       const elapsed = Math.max(0, now - anim.phaseStartTime);
       const t = Math.min(1, elapsed / anim.phaseDuration);
       anim.cameraRow = anim.playerRow;
@@ -2692,20 +2740,14 @@ export class ArcadeManager {
         anim.cameraPitch = 1.06 + (0.16 - 1.06) * easeUp;
         anim.cameraY = 1.20 + (1.24 - 1.20) * easeUp;
       }
-    }
-
-    // 5. MIRANDO EL CRISTAL AGRIETARSE BAJO TUS ZAPATILLAS ('POV_FLOOR_CRACK')
-    else if (anim.camMode === 'POV_FLOOR_CRACK') {
+    } else if (anim.camMode === 'POV_FLOOR_CRACK') {
       anim.cameraRow = anim.playerRow;
       anim.cameraLane = anim.playerLane;
       anim.cameraPitch = 1.06;
       anim.cameraYaw = 0;
       anim.cameraY = 1.16;
       anim.screenShake = 6;
-    }
-
-    // 6. CAÍDA AL ABISMO EN PRIMERA PERSONA ('POV_FALLING')
-    else if (anim.camMode === 'POV_FALLING') {
+    } else if (anim.camMode === 'POV_FALLING') {
       const elapsed = Math.max(0, now - anim.phaseStartTime);
       const t = Math.min(1, elapsed / anim.phaseDuration);
       anim.cameraRow = anim.playerRow;
@@ -2714,10 +2756,7 @@ export class ArcadeManager {
       anim.cameraPitch = 1.06 - t * 1.38;
       anim.cameraYaw = 0;
       anim.cameraRoll = Math.sin(t * Math.PI * 2.5) * 0.20;
-    }
-
-    // 7. TRANSICIÓN CINEMÁTICA AL PERDER UNA VIDA ('RELAY_REVEAL_BEHIND')
-    else if (anim.camMode === 'RELAY_REVEAL_BEHIND') {
+    } else if (anim.camMode === 'RELAY_REVEAL_BEHIND') {
       const elapsed = Math.max(0, now - anim.phaseStartTime);
       const t = Math.min(1, elapsed / anim.phaseDuration);
       anim.cameraYaw = 0;
@@ -2758,316 +2797,920 @@ export class ArcadeManager {
   }
 
   /**
-   * Proyección 3D Gran Angular con Rotación Completa en 3 Ejes (Yaw Horizontal 360° + Pitch Vertical).
-   * Permite girar la cabeza para ver el techo, el abismo, los guardianes en la meta y los jugadores de atrás.
+   * Crea una textura Canvas de alta nitidez para los parches numéricos (#456, #058, #100),
+   * letras de los cristales (A, B, C, D) o el letrero luminoso "META CACES".
    */
-  projectBridge3DPoint(worldX, worldY, worldZ, camX, camY, camZ, yaw, pitch, focal, cx, cy) {
-    const dx = worldX - camX;
-    const dy = camY - worldY; // positivo hacia abajo (suelo en worldY=0, techo en worldY=+5.5, abismo en worldY=-18)
-    const dz = worldZ - camZ; // positivo hacia adelante rumbo a la meta
+  createThreeTextTexture(text, bgHex = '#f8fafc', fgHex = '#0f172a', width = 256, height = 128, fontSize = 72) {
+    const THREE = window.THREE;
+    const c = document.createElement('canvas');
+    c.width = width;
+    c.height = height;
+    const ctx = c.getContext('2d');
+    if (bgHex !== 'transparent') {
+      ctx.fillStyle = bgHex;
+      ctx.fillRect(0, 0, width, height);
+      ctx.strokeStyle = fgHex;
+      ctx.lineWidth = 6;
+      ctx.strokeRect(3, 3, width - 6, height - 6);
+    }
+    ctx.fillStyle = fgHex;
+    ctx.font = `900 ${fontSize}px "JetBrains Mono", monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, width * 0.5, height * 0.52);
+    const tex = new THREE.CanvasTexture(c);
+    tex.needsUpdate = true;
+    return tex;
+  }
 
-    // 1. Rotación horizontal Yaw (alrededor del eje Y)
-    const cosY = Math.cos(yaw);
-    const sinY = Math.sin(yaw);
-    const yawX = dx * cosY - dz * sinY;
-    const yawZ = dz * cosY + dx * sinY;
+  /**
+   * Construye un modelo 3D articulado de Jugador en Three.js (NPCs #058, #100, #456):
+   * - Chándal verde con cierre frontal blanco, camiseta interior blanca visible en el cuello
+   * - Franjas blancas laterales en mangas y piernas
+   * - Rostro 3D proporcionado (cabeza, cabello, cejas, ojos con pupilas, nariz, boca animada)
+   * - Manos articuladas con 5 dedos
+   * - castShadow y receiveShadow activados en todas las mallas
+   */
+  createThreeSquidPlayerMesh(numberStr = '100') {
+    const THREE = window.THREE;
+    const root = new THREE.Group();
 
-    // 2. Rotación vertical Pitch (alrededor del eje X local de la cámara)
-    const cosP = Math.cos(pitch);
-    const sinP = Math.sin(pitch);
-    const rotZ = yawZ * cosP + dy * sinP;
-    const rotY = dy * cosP - yawZ * sinP;
+    const suitMat = new THREE.MeshStandardMaterial({ color: 0x0d9488, roughness: 0.55, metalness: 0.08 });
+    const darkSuitMat = new THREE.MeshStandardMaterial({ color: 0x0f766e, roughness: 0.62, metalness: 0.06 });
+    const whiteMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.35, metalness: 0.05 });
+    const skinMat = new THREE.MeshStandardMaterial({ color: 0xf1c27d, roughness: 0.48, metalness: 0.04 });
+    const hairMat = new THREE.MeshStandardMaterial({
+      color: numberStr === '100' ? 0x64748b : 0x0f172a,
+      roughness: 0.72
+    });
+    const darkMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.3 });
 
-    const safeDepth = Math.max(0.14, rotZ);
-    const scale = focal / safeDepth;
+    // Grupo de pelvis/torso para animar el agachado y el temblor de tensión sobre el cristal
+    const bodyGroup = new THREE.Group();
+    bodyGroup.position.y = 0.72;
+    root.add(bodyGroup);
 
-    return {
-      x: cx + yawX * scale,
-      y: cy + rotY * scale,
-      scale,
-      depth: rotZ
+    // Torso del chándal verde
+    const torso = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.52, 0.24), suitMat);
+    torso.position.y = 0.24;
+    torso.castShadow = true;
+    torso.receiveShadow = true;
+    bodyGroup.add(torso);
+
+    // Camiseta interior blanca en cuello V + Cierre frontal blanco
+    const innerShirt = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.12, 0.248), whiteMat);
+    innerShirt.position.set(0, 0.44, 0);
+    bodyGroup.add(innerShirt);
+
+    const frontZipper = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.50, 0.252), whiteMat);
+    frontZipper.position.set(0, 0.24, 0);
+    bodyGroup.add(frontZipper);
+
+    // Parche numérico en el pecho y en la espalda
+    const patchTex = this.createThreeTextTexture(numberStr, '#f8fafc', '#0f172a', 192, 96, 62);
+    const patchMat = new THREE.MeshStandardMaterial({ map: patchTex, roughness: 0.35 });
+    const frontPatch = new THREE.Mesh(new THREE.PlaneGeometry(0.15, 0.075), patchMat);
+    frontPatch.position.set(-0.09, 0.33, 0.126);
+    bodyGroup.add(frontPatch);
+
+    const backPatch = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 0.11), patchMat);
+    backPatch.position.set(0, 0.30, -0.126);
+    backPatch.rotation.y = Math.PI;
+    bodyGroup.add(backPatch);
+
+    // Cabeza y Rostro 3D detallado
+    const headGroup = new THREE.Group();
+    headGroup.position.set(0, 0.64, 0);
+    bodyGroup.add(headGroup);
+
+    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.068, 0.10, 12), skinMat);
+    neck.position.y = -0.09;
+    neck.castShadow = true;
+    headGroup.add(neck);
+
+    const headMesh = new THREE.Mesh(new THREE.SphereGeometry(0.135, 22, 20), skinMat);
+    headMesh.scale.set(0.94, 1.08, 0.96);
+    headMesh.castShadow = true;
+    headMesh.receiveShadow = true;
+    headGroup.add(headMesh);
+
+    // Cabello modelado en 3D
+    const hairCap = new THREE.Mesh(new THREE.SphereGeometry(0.142, 18, 16, 0, Math.PI * 2, 0, Math.PI * 0.58), hairMat);
+    hairCap.position.y = 0.015;
+    hairCap.rotation.x = -0.18;
+    hairCap.castShadow = true;
+    headGroup.add(hairCap);
+
+    // Ojos (esclera + pupila), cejas, nariz y boca 3D
+    [-0.046, 0.046].forEach((ex) => {
+      const sclera = new THREE.Mesh(new THREE.SphereGeometry(0.021, 10, 10), whiteMat);
+      sclera.position.set(ex, 0.015, 0.118);
+      sclera.scale.set(1.1, 0.85, 0.6);
+      headGroup.add(sclera);
+
+      const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.011, 8, 8), darkMat);
+      pupil.position.set(ex, 0.015, 0.129);
+      headGroup.add(pupil);
+
+      const brow = new THREE.Mesh(new THREE.BoxGeometry(0.042, 0.009, 0.012), hairMat);
+      brow.position.set(ex, 0.044, 0.122);
+      brow.rotation.z = ex < 0 ? -0.16 : 0.16;
+      headGroup.add(brow);
+    });
+
+    const nose = new THREE.Mesh(new THREE.ConeGeometry(0.016, 0.045, 8), skinMat);
+    nose.position.set(0, -0.004, 0.138);
+    nose.rotation.x = Math.PI * 0.45;
+    headGroup.add(nose);
+
+    const mouthMesh = new THREE.Mesh(
+      new THREE.BoxGeometry(0.048, 0.014, 0.012),
+      new THREE.MeshStandardMaterial({ color: 0x7f1d1d, roughness: 0.5 })
+    );
+    mouthMesh.position.set(0, -0.052, 0.124);
+    headGroup.add(mouthMesh);
+
+    // Brazos articulados con franjas blancas laterales y manos con 5 dedos
+    const leftArmGroup = new THREE.Group();
+    const rightArmGroup = new THREE.Group();
+    leftArmGroup.position.set(-0.25, 0.45, 0);
+    rightArmGroup.position.set(0.25, 0.45, 0);
+    bodyGroup.add(leftArmGroup, rightArmGroup);
+
+    [leftArmGroup, rightArmGroup].forEach((armGrp, idx) => {
+      const dir = idx === 0 ? -1 : 1;
+      const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.058, 0.048, 0.44, 12), suitMat);
+      sleeve.position.y = -0.20;
+      sleeve.castShadow = true;
+      armGrp.add(sleeve);
+
+      // Franja blanca lateral en la manga
+      const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.42, 0.025), whiteMat);
+      stripe.position.set(dir * 0.054, -0.20, 0);
+      armGrp.add(stripe);
+
+      // Mano con palma y 5 dedos
+      const hand = new THREE.Group();
+      hand.position.y = -0.44;
+      armGrp.add(hand);
+
+      const palm = new THREE.Mesh(new THREE.BoxGeometry(0.052, 0.055, 0.026), skinMat);
+      palm.castShadow = true;
+      hand.add(palm);
+
+      for (let f = -2; f <= 2; f++) {
+        const finger = new THREE.Mesh(new THREE.CylinderGeometry(0.0055, 0.005, 0.036, 6), skinMat);
+        finger.position.set(f * 0.011, -0.04, 0);
+        hand.add(finger);
+      }
+    });
+
+    // Piernas articuladas con franjas blancas laterales y zapatillas blancas
+    const leftLegGroup = new THREE.Group();
+    const rightLegGroup = new THREE.Group();
+    leftLegGroup.position.set(-0.11, 0.72, 0);
+    rightLegGroup.position.set(0.11, 0.72, 0);
+    root.add(leftLegGroup, rightLegGroup);
+
+    [leftLegGroup, rightLegGroup].forEach((legGrp, idx) => {
+      const dir = idx === 0 ? -1 : 1;
+      const pant = new THREE.Mesh(new THREE.CylinderGeometry(0.078, 0.062, 0.66, 12), darkSuitMat);
+      pant.position.y = -0.33;
+      pant.castShadow = true;
+      pant.receiveShadow = true;
+      legGrp.add(pant);
+
+      // Franja blanca lateral a lo largo del pantalón
+      const legStripe = new THREE.Mesh(new THREE.BoxGeometry(0.016, 0.64, 0.03), whiteMat);
+      legStripe.position.set(dir * 0.072, -0.33, 0);
+      legGrp.add(legStripe);
+
+      // Zapatilla blanca Squid Game
+      const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.075, 0.24), whiteMat);
+      shoe.position.set(0, -0.68, 0.04);
+      shoe.castShadow = true;
+      shoe.receiveShadow = true;
+      legGrp.add(shoe);
+    });
+
+    root.userData = {
+      numberStr,
+      bodyGroup,
+      headGroup,
+      mouthMesh,
+      leftArmGroup,
+      rightArmGroup,
+      leftLegGroup,
+      rightLegGroup
+    };
+    return root;
+  }
+
+  /**
+   * Construye un Guardián Rosa 3D en Three.js (○, △, □) con rifle e iluminación de contorno dramática
+   */
+  createThreePinkGuardMesh(symbolType = 'square') {
+    const THREE = window.THREE;
+    const group = new THREE.Group();
+
+    const pinkMat = new THREE.MeshStandardMaterial({ color: 0xe11d48, roughness: 0.42, metalness: 0.12 });
+    const blackMat = new THREE.MeshStandardMaterial({ color: 0x090d16, roughness: 0.25, metalness: 0.45 });
+
+    // Piernas
+    [-0.11, 0.11].forEach(lx => {
+      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.078, 0.065, 0.72, 12), pinkMat);
+      leg.position.set(lx, 0.36, 0);
+      leg.castShadow = true;
+      leg.receiveShadow = true;
+      group.add(leg);
+    });
+
+    // Torso y cinturón táctico
+    const torso = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.56, 0.26), pinkMat);
+    torso.position.y = 0.98;
+    torso.castShadow = true;
+    torso.receiveShadow = true;
+    group.add(torso);
+
+    const belt = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.06, 0.27), blackMat);
+    belt.position.y = 0.78;
+    group.add(belt);
+
+    // Rifle táctico cruzado al pecho
+    const rifle = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.08, 0.06), blackMat);
+    rifle.position.set(0, 0.98, 0.16);
+    rifle.rotation.z = -0.32;
+    rifle.castShadow = true;
+    group.add(rifle);
+
+    // Capucha rosa y máscara negra con símbolo geométrico brillante (○, △, □)
+    const hood = new THREE.Mesh(new THREE.SphereGeometry(0.165, 20, 18), pinkMat);
+    hood.position.y = 1.44;
+    hood.scale.set(0.95, 1.12, 0.95);
+    hood.castShadow = true;
+    group.add(hood);
+
+    const symChar = symbolType === 'circle' ? '◯' : (symbolType === 'triangle' ? '△' : '□');
+    const maskTex = this.createThreeTextTexture(symChar, '#090d16', '#ffffff', 128, 128, 76);
+    const maskMat = new THREE.MeshStandardMaterial({
+      map: maskTex,
+      roughness: 0.22,
+      metalness: 0.35,
+      emissive: 0xffffff,
+      emissiveMap: maskTex,
+      emissiveIntensity: 0.45
+    });
+    const maskMesh = new THREE.Mesh(new THREE.SphereGeometry(0.148, 18, 16), maskMat);
+    maskMesh.position.set(0, 1.44, 0.025);
+    maskMesh.rotation.y = -Math.PI * 0.5;
+    group.add(maskMesh);
+
+    return group;
+  }
+
+  /**
+   * Inicializa la escena Three.js / WebGL completa con:
+   * - Sombras dinámicas reales (PCFSoftShadowMap, castShadow / receiveShadow)
+   * - Bombillas esféricas de luz cálida a los costados de las vigas rosadas y reflectores volumétricos
+   * - Carpa circense superior (secciones rojas, verdes y moradas con tiras de luces cálidas)
+   * - Candelabro clásico colgante en el centro y cortinas plisadas de terciopelo rojo en el abismo
+   * - META CACES imponente (arco con luces de marquesina de colores, puertas dobles ornamentadas,
+   *   postes dorados con cordones de terciopelo azul y 3 guardias rosas con iluminación de contorno)
+   * - Jugadores traseros 3D detallados (#058, #100, #456) con animación de tensión/agachado
+   */
+  initThreeJSBridgeScene() {
+    if (!window.THREE || !this.bridgeState) return;
+    const THREE = window.THREE;
+    const mount = document.getElementById('squid-threejs-mount');
+    if (!mount) return;
+
+    this.disposeThreeJSScene();
+    mount.innerHTML = '';
+
+    const rect = mount.getBoundingClientRect();
+    const W = Math.max(320, rect.width || 800);
+    const H = Math.max(200, rect.height || 420);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    renderer.setSize(W, H, false);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    if (THREE.ACESFilmicToneMapping !== undefined) {
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.12;
+    }
+    renderer.domElement.className = 'w-full h-full block';
+    mount.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x07020e);
+    scene.fog = new THREE.FogExp2(0x07020e, 0.026);
+
+    const camera = new THREE.PerspectiveCamera(68, W / H, 0.08, 110);
+    camera.rotation.order = 'YXZ';
+
+    // 1. ILUMINACIÓN REALISTA Y SOMBRAS DINÁMICAS (castShadow / receiveShadow)
+    const hemiLight = new THREE.HemisphereLight(0xffe8d6, 0x1e0b36, 0.55);
+    scene.add(hemiLight);
+
+    const mainSpot = new THREE.SpotLight(0xfff3d1, 2.35, 48, Math.PI * 0.36, 0.45, 1.2);
+    mainSpot.position.set(1.8, 9.2, -4.5);
+    mainSpot.castShadow = true;
+    mainSpot.shadow.mapSize.width = 2048;
+    mainSpot.shadow.mapSize.height = 2048;
+    mainSpot.shadow.camera.near = 1.5;
+    mainSpot.shadow.camera.far = 36;
+    mainSpot.shadow.bias = -0.0005;
+    scene.add(mainSpot);
+    scene.add(mainSpot.target);
+
+    // Reflectores superiores con haces de luz volumétrica apuntando hacia la pasarela
+    const volumetricCones = [];
+    const coneGeo = new THREE.ConeGeometry(2.6, 8.2, 24, 1, true);
+    const coneMat = new THREE.MeshBasicMaterial({
+      color: 0xffe8a3,
+      transparent: true,
+      opacity: 0.065,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+
+    [0, 4, 8, 11].forEach((stepZ, idx) => {
+      const sx = (idx % 2 === 0 ? -1.4 : 1.4);
+      const sz = -stepZ;
+      const cone = new THREE.Mesh(coneGeo, coneMat);
+      cone.position.set(sx * 0.5, 4.6, sz);
+      cone.rotation.z = sx > 0 ? 0.14 : -0.14;
+      scene.add(cone);
+      volumetricCones.push(cone);
+    });
+
+    // 2. CARPA CIRCENSE SUPERIOR DIVIDIDA EN SECCIONES ROJAS, VERDES Y MORADAS + TIRAS DE LUCES CÁLIDAS
+    const circusGroup = new THREE.Group();
+    const tentColors = [0xb91c1c, 0x047857, 0x581c87]; // Rojo, Verde Esmeralda y Morado
+    const numSegments = 24;
+    const tentRadius = 18.5;
+    const tentPeakY = 12.2;
+    const tentEaveY = 6.2;
+    const tentCenterZ = -5.5;
+
+    const warmBulbGeo = new THREE.SphereGeometry(0.08, 8, 8);
+    const warmBulbMat = new THREE.MeshBasicMaterial({ color: 0xffdf7e });
+
+    for (let i = 0; i < numSegments; i++) {
+      const a1 = (i / numSegments) * Math.PI * 2;
+      const a2 = ((i + 1) / numSegments) * Math.PI * 2;
+
+      const segGeo = new THREE.BufferGeometry();
+      const vertices = new Float32Array([
+        0, tentPeakY, tentCenterZ,
+        Math.cos(a1) * tentRadius, tentEaveY, tentCenterZ + Math.sin(a1) * tentRadius,
+        Math.cos(a2) * tentRadius, tentEaveY, tentCenterZ + Math.sin(a2) * tentRadius
+      ]);
+      segGeo.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+      segGeo.computeVertexNormals();
+
+      const segMat = new THREE.MeshStandardMaterial({
+        color: tentColors[i % tentColors.length],
+        roughness: 0.72,
+        metalness: 0.08,
+        side: THREE.DoubleSide
+      });
+      const segMesh = new THREE.Mesh(segGeo, segMat);
+      circusGroup.add(segMesh);
+
+      // Tiras de luces cálidas bordeando cada unión de la carpa circense
+      for (let b = 1; b <= 6; b++) {
+        const frac = b / 6;
+        const bx = Math.cos(a1) * tentRadius * frac;
+        const by = tentPeakY + (tentEaveY - tentPeakY) * frac - 0.05;
+        const bz = tentCenterZ + Math.sin(a1) * tentRadius * frac;
+        const bulb = new THREE.Mesh(warmBulbGeo, warmBulbMat);
+        bulb.position.set(bx, by, bz);
+        circusGroup.add(bulb);
+      }
+    }
+    scene.add(circusGroup);
+
+    // 3. CANDELABRO CLÁSICO COLGANTE EN EL CENTRO
+    const chandelier = new THREE.Group();
+    chandelier.position.set(0, 6.4, -5.5);
+    const goldMetalMat = new THREE.MeshStandardMaterial({ color: 0xfbbf24, metalness: 0.92, roughness: 0.18 });
+    const crystalMat = new THREE.MeshPhysicalMaterial({
+      color: 0xfffbeb,
+      transparent: true,
+      opacity: 0.85,
+      roughness: 0.05,
+      metalness: 0.1
+    });
+
+    const chain = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 5.6, 8), goldMetalMat);
+    chain.position.y = 2.8;
+    chandelier.add(chain);
+
+    [1.45, 0.95, 0.52].forEach((rad, tierIdx) => {
+      const tierY = -tierIdx * 0.42;
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(rad, 0.045, 12, 32), goldMetalMat);
+      ring.rotation.x = Math.PI * 0.5;
+      ring.position.y = tierY;
+      chandelier.add(ring);
+
+      const candleCount = 10 - tierIdx * 2;
+      for (let c = 0; c < candleCount; c++) {
+        const ang = (c / candleCount) * Math.PI * 2;
+        const cx = Math.cos(ang) * rad;
+        const cz = Math.sin(ang) * rad;
+
+        const candleFlame = new THREE.Mesh(new THREE.SphereGeometry(0.065, 8, 8), warmBulbMat);
+        candleFlame.position.set(cx, tierY + 0.14, cz);
+        chandelier.add(candleFlame);
+
+        const prism = new THREE.Mesh(new THREE.OctahedronGeometry(0.075, 0), crystalMat);
+        prism.position.set(cx, tierY - 0.14, cz);
+        chandelier.add(prism);
+      }
+    });
+
+    const chandelierLight = new THREE.PointLight(0xffd166, 1.45, 28, 1.5);
+    chandelierLight.position.set(0, -0.2, 0);
+    chandelier.add(chandelierLight);
+    scene.add(chandelier);
+
+    // 4. CORTINAS PLISADAS DE TERCIOPELO ROJO RODEANDO LAS PAREDES DEL ABISMO
+    const velvetMat = new THREE.MeshStandardMaterial({
+      color: 0x881337,
+      roughness: 0.82,
+      metalness: 0.06
+    });
+    const pleatGeo = new THREE.CylinderGeometry(0.42, 0.42, 24, 14);
+    [-7.8, 7.8].forEach(wallX => {
+      for (let z = 3; z >= -16; z -= 0.78) {
+        const pleat = new THREE.Mesh(pleatGeo, velvetMat);
+        pleat.position.set(wallX + Math.sin(z * 2) * 0.08, -4.5, z);
+        pleat.receiveShadow = true;
+        scene.add(pleat);
+      }
+      // Cenefa dorada superior sobre las cortinas de terciopelo
+      const valance = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.28, 20), goldMetalMat);
+      valance.position.set(wallX, 6.1, -6.5);
+      scene.add(valance);
+    });
+
+    // 5. VIGAS ROSADAS DEL PUENTE + BOMBILLAS ESFÉRICAS DE LUZ CÁLIDA A LOS COSTADOS
+    const st = this.bridgeState;
+    const beamMat = new THREE.MeshStandardMaterial({ color: 0xe11d48, metalness: 0.58, roughness: 0.32 });
+    const railLen = st.totalSteps + 3.2;
+    [-1.88, -0.94, 0, 0.94, 1.88].forEach(rx => {
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.16, railLen), beamMat);
+      rail.position.set(rx, -0.08, -(st.totalSteps * 0.5 - 0.5));
+      rail.castShadow = true;
+      rail.receiveShadow = true;
+      scene.add(rail);
+    });
+
+    // Bombillas esféricas de luz cálida a los costados de las vigas rosadas exteriores
+    const sideBulbGeo = new THREE.SphereGeometry(0.052, 12, 12);
+    const sideBulbMat = new THREE.MeshStandardMaterial({
+      color: 0xffe8a3,
+      emissive: 0xffa200,
+      emissiveIntensity: 2.4,
+      roughness: 0.15
+    });
+    const socketGeo = new THREE.CylinderGeometry(0.025, 0.028, 0.04, 8);
+
+    for (let r = -1; r <= st.totalSteps; r++) {
+      [-1.96, 1.96].forEach(bx => {
+        const socket = new THREE.Mesh(socketGeo, goldMetalMat);
+        socket.position.set(bx, 0.01, -r);
+        scene.add(socket);
+
+        const bulb = new THREE.Mesh(sideBulbGeo, sideBulbMat);
+        bulb.position.set(bx, 0.065, -r);
+        scene.add(bulb);
+      });
+    }
+
+    // Iluminación cálida puntual a lo largo de las vigas
+    [0, 5, 10].forEach(r => {
+      const ptLight = new THREE.PointLight(0xffb703, 0.65, 7.5, 1.8);
+      ptLight.position.set(0, 0.65, -r);
+      scene.add(ptLight);
+    });
+
+    // 6. PLATAFORMA DE SALIDA (con franja de peligro amarilla/negra)
+    const platMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.45, metalness: 0.25 });
+    const startPlat = new THREE.Mesh(new THREE.BoxGeometry(4.4, 0.28, 2.4), platMat);
+    startPlat.position.set(0, -0.14, 1.65);
+    startPlat.receiveShadow = true;
+    startPlat.castShadow = true;
+    scene.add(startPlat);
+
+    for (let i = 0; i < 10; i++) {
+      const stripeMat = new THREE.MeshStandardMaterial({
+        color: i % 2 === 0 ? 0xfacc15 : 0x090d16,
+        roughness: 0.4
+      });
+      const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.01, 0.22), stripeMat);
+      stripe.position.set(-1.89 + i * 0.42, 0.005, 0.58);
+      stripe.receiveShadow = true;
+      scene.add(stripe);
+    }
+
+    // 7. PANELES DE VIDRIO SEMITRANSPARENTES Y REFLECTANTES (con castShadow y receiveShadow)
+    const tileMeshes = Array.from({ length: st.totalSteps }, () => []);
+    const letters = ['A', 'B', 'C', 'D'];
+    const letterTextures = letters.map(L => this.createThreeTextTexture(L, 'transparent', '#e0f2fe', 128, 128, 80));
+    const clampGeo = new THREE.BoxGeometry(0.05, 0.065, 0.05);
+    const clampMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, metalness: 0.88, roughness: 0.2 });
+
+    for (let r = 0; r < st.totalSteps; r++) {
+      for (let lane = 0; lane < 4; lane++) {
+        const tileGroup = new THREE.Group();
+        const wx = (lane - 1.5) * 0.94;
+        const wz = -r;
+        tileGroup.position.set(wx, 0, wz);
+
+        const glassMat = new THREE.MeshPhysicalMaterial({
+          color: 0xbae6fd,
+          transparent: true,
+          opacity: 0.46,
+          roughness: 0.06,
+          metalness: 0.14,
+          reflectivity: 0.95,
+          clearcoat: 1.0,
+          clearcoatRoughness: 0.05
+        });
+
+        const glassBox = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.055, 0.72), glassMat);
+        glassBox.position.y = -0.025;
+        glassBox.castShadow = true;
+        glassBox.receiveShadow = true;
+        tileGroup.add(glassBox);
+
+        // Marco brillante del cristal
+        const edgeGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(0.822, 0.056, 0.722));
+        const edgeMat = new THREE.LineBasicMaterial({ color: 0x7dd3fc, transparent: true, opacity: 0.75 });
+        const edgeLines = new THREE.LineSegments(edgeGeo, edgeMat);
+        edgeLines.position.y = -0.025;
+        tileGroup.add(edgeLines);
+
+        // 4 abrazaderas metálicas en las esquinas
+        [
+          [-0.39, -0.33], [0.39, -0.33],
+          [-0.39,  0.33], [0.39,  0.33]
+        ].forEach(([cx, cz]) => {
+          const clamp = new THREE.Mesh(clampGeo, clampMat);
+          clamp.position.set(cx, -0.02, cz);
+          clamp.castShadow = true;
+          tileGroup.add(clamp);
+        });
+
+        // Etiqueta A, B, C, D sobre el cristal
+        const labelPlane = new THREE.Mesh(
+          new THREE.PlaneGeometry(0.26, 0.26),
+          new THREE.MeshBasicMaterial({ map: letterTextures[lane], transparent: true, opacity: 0.9 })
+        );
+        labelPlane.rotation.x = -Math.PI * 0.5;
+        labelPlane.position.y = 0.005;
+        tileGroup.add(labelPlane);
+
+        tileGroup.userData = { glassBox, glassMat, edgeMat, r, lane };
+        scene.add(tileGroup);
+        tileMeshes[r][lane] = tileGroup;
+      }
+    }
+
+    // 8. META IMPONENTE (META CACES):
+    //    - Plataforma final con alfombra imperial
+    //    - Arco iluminado por luces de marquesina de colores + letrero "META CACES"
+    //    - Puertas dobles ornamentadas al fondo
+    //    - Postes dorados con cordones de terciopelo azul
+    //    - 3 Guardias de traje rosa frente a la meta con iluminación de contorno dramática (rim lighting)
+    const finishZ = -(st.totalSteps + 0.85);
+    const finishGroup = new THREE.Group();
+    finishGroup.position.set(0, 0, finishZ);
+    scene.add(finishGroup);
+
+    const finishBase = new THREE.Mesh(new THREE.BoxGeometry(5.2, 0.35, 3.6), platMat);
+    finishBase.position.set(0, -0.175, -0.9);
+    finishBase.receiveShadow = true;
+    finishBase.castShadow = true;
+    finishGroup.add(finishBase);
+
+    // Alfombra de terciopelo azul real en el pasillo central de la meta
+    const blueVelvetMat = new THREE.MeshStandardMaterial({ color: 0x1d4ed8, roughness: 0.82, metalness: 0.08 });
+    const carpet = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.015, 3.4), blueVelvetMat);
+    carpet.position.set(0, 0.008, -0.9);
+    carpet.receiveShadow = true;
+    finishGroup.add(carpet);
+
+    // Arco iluminado por luces de marquesina de colores ("META CACES")
+    const archGroup = new THREE.Group();
+    archGroup.position.set(0, 0, 0.25);
+    finishGroup.add(archGroup);
+
+    const archFrameMat = new THREE.MeshStandardMaterial({ color: 0x881337, metalness: 0.45, roughness: 0.35 });
+    [-2.05, 2.05].forEach(px => {
+      const col = new THREE.Mesh(new THREE.BoxGeometry(0.28, 3.2, 0.28), archFrameMat);
+      col.position.set(px, 1.6, 0);
+      col.castShadow = true;
+      col.receiveShadow = true;
+      archGroup.add(col);
+    });
+
+    const archTop = new THREE.Mesh(new THREE.BoxGeometry(4.45, 0.48, 0.32), archFrameMat);
+    archTop.position.set(0, 3.25, 0);
+    archTop.castShadow = true;
+    archGroup.add(archTop);
+
+    const metaSignTex = this.createThreeTextTexture('★ META CACES ★', '#090d16', '#fde047', 512, 128, 54);
+    const metaSign = new THREE.Mesh(
+      new THREE.PlaneGeometry(3.5, 0.42),
+      new THREE.MeshStandardMaterial({
+        map: metaSignTex,
+        emissive: 0xfde047,
+        emissiveMap: metaSignTex,
+        emissiveIntensity: 0.65
+      })
+    );
+    metaSign.position.set(0, 3.25, 0.17);
+    archGroup.add(metaSign);
+
+    // Luces de marquesina de colores alrededor del arco
+    const marqueeBulbs = [];
+    const marqueeColors = [0xfde047, 0xf43f5e, 0x38bdf8, 0x10b981];
+    for (let i = 0; i <= 16; i++) {
+      const bx = -2.0 + (i / 16) * 4.0;
+      const mMat = new THREE.MeshBasicMaterial({ color: marqueeColors[i % marqueeColors.length] });
+      const mb = new THREE.Mesh(new THREE.SphereGeometry(0.055, 8, 8), mMat);
+      mb.position.set(bx, 3.52, 0.18);
+      archGroup.add(mb);
+      marqueeBulbs.push({ mesh: mb, idx: i });
+    }
+    for (let j = 0; j < 10; j++) {
+      const by = 0.3 + j * 0.28;
+      [-2.05, 2.05].forEach((bx, sIdx) => {
+        const mMat = new THREE.MeshBasicMaterial({ color: marqueeColors[(j + sIdx) % marqueeColors.length] });
+        const mb = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 8), mMat);
+        mb.position.set(bx, by, 0.16);
+        archGroup.add(mb);
+        marqueeBulbs.push({ mesh: mb, idx: j + sIdx });
+      });
+    }
+
+    // Puertas dobles ornamentadas al fondo de la meta
+    const doorsGroup = new THREE.Group();
+    doorsGroup.position.set(0, 0, -2.35);
+    finishGroup.add(doorsGroup);
+
+    const woodMat = new THREE.MeshStandardMaterial({ color: 0x2a1215, roughness: 0.52, metalness: 0.15 });
+    const doorFrame = new THREE.Mesh(new THREE.BoxGeometry(3.2, 3.5, 0.24), goldMetalMat);
+    doorFrame.position.y = 1.75;
+    doorFrame.castShadow = true;
+    doorsGroup.add(doorFrame);
+
+    [-0.72, 0.72].forEach((dx, dIdx) => {
+      const leaf = new THREE.Mesh(new THREE.BoxGeometry(1.38, 3.25, 0.28), woodMat);
+      leaf.position.set(dx, 1.65, 0.04);
+      leaf.castShadow = true;
+      leaf.receiveShadow = true;
+      doorsGroup.add(leaf);
+
+      // Molduras doradas ornamentadas y tiradores de anillo
+      [0.85, 2.35].forEach(py => {
+        const panel = new THREE.Mesh(new THREE.BoxGeometry(1.05, 1.05, 0.04), goldMetalMat);
+        panel.position.set(dx, py, 0.19);
+        doorsGroup.add(panel);
+      });
+
+      const handleRing = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.022, 10, 20), goldMetalMat);
+      handleRing.position.set(dIdx === 0 ? -0.16 : 0.16, 1.52, 0.22);
+      doorsGroup.add(handleRing);
+    });
+
+    // Postes dorados (stanchions) con cordones de terciopelo azul a ambos lados de la meta
+    [-1.65, 1.65].forEach(sx => {
+      const zPosts = [0.35, -0.55, -1.45, -2.15];
+      zPosts.forEach((pz, pIdx) => {
+        const base = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.16, 0.05, 16), goldMetalMat);
+        base.position.set(sx, 0.025, pz);
+        base.castShadow = true;
+        finishGroup.add(base);
+
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.92, 12), goldMetalMat);
+        pole.position.set(sx, 0.48, pz);
+        pole.castShadow = true;
+        finishGroup.add(pole);
+
+        const ball = new THREE.Mesh(new THREE.SphereGeometry(0.065, 14, 14), goldMetalMat);
+        ball.position.set(sx, 0.96, pz);
+        finishGroup.add(ball);
+
+        if (pIdx < zPosts.length - 1) {
+          const nextZ = zPosts[pIdx + 1];
+          const midZ = (pz + nextZ) * 0.5;
+          const curve = new THREE.CatmullRomCurve3([
+            new THREE.Vector3(sx, 0.88, pz),
+            new THREE.Vector3(sx, 0.64, midZ),
+            new THREE.Vector3(sx, 0.88, nextZ)
+          ]);
+          const ropeGeo = new THREE.TubeGeometry(curve, 14, 0.028, 8, false);
+          const ropeMesh = new THREE.Mesh(ropeGeo, blueVelvetMat);
+          ropeMesh.castShadow = true;
+          finishGroup.add(ropeMesh);
+        }
+      });
+    });
+
+    // 3 Guardias de traje rosa frente a la meta con iluminación de contorno dramática (rim lighting)
+    const guardSpecs = [
+      { x: -0.95, z: -0.85, sym: 'triangle' },
+      { x:  0.00, z: -0.65, sym: 'square' },
+      { x:  0.95, z: -0.85, sym: 'circle' }
+    ];
+    guardSpecs.forEach(gs => {
+      const gMesh = this.createThreePinkGuardMesh(gs.sym);
+      gMesh.position.set(gs.x, 0, gs.z);
+      finishGroup.add(gMesh);
+
+      // Luz de contorno dramática (Rim Light magenta/cian detrás de cada guardia)
+      const rimLight = new THREE.PointLight(0xff2a85, 1.85, 4.5, 1.5);
+      rimLight.position.set(gs.x, 1.45, gs.z - 0.55);
+      finishGroup.add(rimLight);
+    });
+
+    // 9. JUGADORES 3D DETALLADOS (#456, #058, #100) EN LA ESCENA
+    const playerMeshes = {
+      '456': this.createThreeSquidPlayerMesh('456'),
+      '058': this.createThreeSquidPlayerMesh('058'),
+      '100': this.createThreeSquidPlayerMesh('100')
+    };
+    Object.values(playerMeshes).forEach(pm => scene.add(pm));
+
+    // Canica 3D
+    const marbleMesh = new THREE.Mesh(
+      new THREE.SphereGeometry(0.065, 16, 16),
+      new THREE.MeshStandardMaterial({ color: 0x38bdf8, metalness: 0.75, roughness: 0.1 })
+    );
+    marbleMesh.visible = false;
+    marbleMesh.castShadow = true;
+    scene.add(marbleMesh);
+
+    this.threeCtx = {
+      renderer,
+      scene,
+      camera,
+      mainSpot,
+      volumetricCones,
+      marqueeBulbs,
+      tileMeshes,
+      playerMeshes,
+      marbleMesh,
+      marqueeColors
     };
   }
 
   /**
-   * Proyección geométrica de Sombra Direccional en Tiempo Real (Ray-Plane Intersection)
-   * desde el reflector principal `L = (lightX, lightY, lightZ)` sobre el plano `y = floorY`.
+   * Renderiza cada fotograma de la escena Three.js WebGL + actualiza las animaciones de tensión/agachado
+   * de los jugadores traseros (#058, #100) y las regiones de clic de los cristales.
    */
-  projectDirectionalShadowPoint(wx, wy, wz, floorY, lightX, lightY, lightZ, projFn) {
-    const denom = (wy - lightY) || -0.001;
-    const t = (floorY - lightY) / denom;
-    const sx = lightX + (wx - lightX) * t;
-    const sz = lightZ + (wz - lightZ) * t;
-    return projFn(sx, floorY + 0.004, sz);
-  }
-
-  drawGlassBridge3DScene(canvas, now) {
-    const ctx = canvas.getContext('2d');
-    if (!ctx || !this.bridgeState) return;
+  renderThreeJSBridgeFrame(hudCanvas, now) {
+    const THREE = window.THREE;
+    const tCtx = this.threeCtx;
     const st = this.bridgeState;
+    if (!THREE || !tCtx || !st) return;
+
     const anim = st.anim;
+    const { renderer, scene, camera, mainSpot, tileMeshes, playerMeshes, marbleMesh, marqueeBulbs, marqueeColors } = tCtx;
 
-    const W = canvas.width;
-    const H = canvas.height;
-    const cx = W * 0.5;
-    const cy = H * 0.46; // Horizonte centrado para gran angular
-    // Lente Gran Angular (~98° FOV) para que se vea amplio todo el coliseo, la plataforma, el techo y la meta
-    const focal = Math.min(W, H) * 0.62;
-
+    // 1. Actualizar posición y rotación de la cámara Three.js (con amortiguación suave e inclinación hacia los pies)
     const camX = (anim.cameraLane - 1.5) * 0.94;
     const camY = anim.cameraY;
-    const camZ = anim.cameraRow;
-    const yaw = anim.cameraYaw || 0;
-    const pitch = anim.cameraPitch || 0.16;
+    const camZ = -anim.cameraRow; // En Three.js el puente avanza hacia -Z
 
-    // Posición en tiempo real del reflector direccional principal del techo (para cálculo de sombras reales)
-    const mainLightX = Math.sin(now * 0.0008) * 1.45;
-    const mainLightY = 6.2;
-    const mainLightZ = camZ + 2.2 + Math.cos(now * 0.0006) * 0.9;
+    const shakeX = anim.screenShake > 0 ? (Math.random() - 0.5) * anim.screenShake * 0.008 : 0;
+    const shakeY = anim.screenShake > 0 ? (Math.random() - 0.5) * anim.screenShake * 0.008 : 0;
 
-    const proj = (wx, wy, wz) => this.projectBridge3DPoint(wx, wy, wz, camX, camY, camZ, yaw, pitch, focal, cx, cy);
+    camera.position.set(camX + shakeX, camY + shakeY, camZ);
+    camera.rotation.y = anim.cameraYaw || 0;
+    camera.rotation.x = -(anim.cameraPitch || 0.16);
+    camera.rotation.z = anim.cameraRoll || 0;
 
-    ctx.save();
-    if (anim.screenShake > 0) {
-      ctx.translate(
-        (Math.random() - 0.5) * anim.screenShake,
-        (Math.random() - 0.5) * anim.screenShake
-      );
-    }
+    // El reflector principal con sombras dinámicas sigue el avance por el puente
+    mainSpot.position.set(Math.sin(now * 0.0007) * 2.2, 9.2, camZ - 2.5);
+    mainSpot.target.position.set(0, 0, camZ - 2.2);
+    mainSpot.target.updateMatrixWorld();
 
-    // 1. FONDO DEL COLISEO Y ABISMO PROFUNDO
-    const skyGrad = ctx.createLinearGradient(0, 0, 0, H);
-    skyGrad.addColorStop(0, '#05020a');
-    skyGrad.addColorStop(0.42, '#130724');
-    skyGrad.addColorStop(0.75, '#0b0316');
-    skyGrad.addColorStop(1, '#020005');
-    ctx.fillStyle = skyGrad;
-    ctx.fillRect(0, 0, W, H);
+    // 2. Animar luces de marquesina de colores en el arco de META CACES
+    const tick = Math.floor(now / 180);
+    marqueeBulbs.forEach(b => {
+      const colHex = marqueeColors[(b.idx + tick) % marqueeColors.length];
+      b.mesh.material.color.setHex(colHex);
+    });
 
-    // 2. CORTINAJES DE CIRCO EN LAS PAREDES LATERALES Y PILARES DEL ABISMO
-    this.drawColiseumWallsAndAbyss3D(ctx, proj, st, now, W, H);
-
-    // 3. TECHO ABOVEDADO CON VIGAS DE ACERO, ANILLOS DORADOS Y REFLECTORES VOLUMÉTRICOS
-    this.drawColiseumCeilingAndLights3D(ctx, proj, st, now, mainLightX, mainLightY, mainLightZ);
-
-    // 4. PLATAFORMA DE SALIDA (CON FRANJA DE PELIGRO AMARILLA/NEGRA Y BARANDALES)
-    this.drawStartPlatform3D(ctx, proj, now);
-
-    // 5. PLATAFORMA DE META AL FINAL DEL PUENTE CON ARCO NEÓN Y LOS 3 GUARDIANES ROSAS (○ △ □)
-    this.drawFinishPlatformAndGuards3D(ctx, proj, st, now, mainLightX, mainLightY, mainLightZ);
-
-    // 6. VIGAS ESTRUCTURALES DE ACERO ROSA CON CARAS 3D Y PERNOS
-    this.drawSteelBridgeRails3D(ctx, proj, st);
-
-    // 7. PELDAÑOS DE CRISTAL 3D (CON ESPESOR FÍSICO DE 6CM, ABRAZADERAS METÁLICAS Y SOMBRAS DIRECCIONALES)
-    anim.tileHitRegions = [];
-    const letters = ['A', 'B', 'C', 'D'];
-
-    // Ordenar peldaños por distancia a la cámara para pintado correcto tanto mirando al frente como mirando atrás
-    const stepIndices = Array.from({ length: st.totalSteps }, (_, i) => i);
-    stepIndices.sort((a, b) => Math.abs(b - camZ) - Math.abs(a - camZ));
-
-    for (const r of stepIndices) {
-      const zNear = r - 0.36;
-      const zFar = r + 0.36;
+    // 3. Actualizar estado visual de los paneles de vidrio (intacto, seguro, agrietándose o roto)
+    for (let r = 0; r < st.totalSteps; r++) {
       const isCurrentTargetStep = (r === st.currentStep) && !st.awaitingNextStep && !st.isGameOver && !st.isVictory;
-
       for (let lane = 0; lane < 4; lane++) {
+        const tg = tileMeshes[r][lane];
+        if (!tg) continue;
         const tileState = st.tiles[r][lane];
-        if (tileState === 'broken') continue;
-
-        const xCenter = (lane - 1.5) * 0.94;
-        const xLeft = xCenter - 0.41;
-        const xRight = xCenter + 0.41;
-        const thicknessY = -0.055; // Espesor físico 3D del bloque de cristal templado
-
-        const pTL = proj(xLeft, 0, zFar);
-        const pTR = proj(xRight, 0, zFar);
-        const pBR = proj(xRight, 0, zNear);
-        const pBL = proj(xLeft, 0, zNear);
-
-        if (pTL.depth <= 0.15 && pTR.depth <= 0.15 && pBR.depth <= 0.15 && pBL.depth <= 0.15) continue;
-
-        const bBL = proj(xLeft, thicknessY, zNear);
-        const bBR = proj(xRight, thicknessY, zNear);
-
-        const isHovered = isCurrentTargetStep && anim.hoveredLane === lane;
+        if (tileState === 'broken') {
+          tg.visible = false;
+          continue;
+        }
+        tg.visible = true;
+        const { glassMat, edgeMat } = tg.userData;
         const isSafe = tileState === 'safe';
+        const isHovered = isCurrentTargetStep && anim.hoveredLane === lane;
         const isCrackingNow = (anim.camMode === 'POV_FLOOR_CRACK') && r === st.currentStep && lane === anim.jumpTargetLane;
 
-        ctx.save();
-
-        // Cara lateral/frontal 3D de espesor del bloque de vidrio
-        if (bBL.depth > 0.15 && bBR.depth > 0.15) {
-          ctx.fillStyle = isSafe ? 'rgba(6, 95, 70, 0.85)' : 'rgba(30, 58, 138, 0.55)';
-          ctx.beginPath();
-          ctx.moveTo(pBL.x, pBL.y);
-          ctx.lineTo(pBR.x, pBR.y);
-          ctx.lineTo(bBR.x, bBR.y);
-          ctx.lineTo(bBL.x, bBL.y);
-          ctx.closePath();
-          ctx.fill();
-        }
-
-        // Superficie superior del cristal
-        ctx.beginPath();
-        ctx.moveTo(pTL.x, pTL.y);
-        ctx.lineTo(pTR.x, pTR.y);
-        ctx.lineTo(pBR.x, pBR.y);
-        ctx.lineTo(pBL.x, pBL.y);
-        ctx.closePath();
-
         if (isCrackingNow) {
-          ctx.fillStyle = 'rgba(244, 63, 94, 0.52)';
-          ctx.strokeStyle = '#fecdd3';
-          ctx.lineWidth = 2.8;
+          glassMat.color.setHex(0xf43f5e);
+          glassMat.opacity = 0.72;
+          edgeMat.color.setHex(0xfecdd3);
         } else if (isSafe) {
-          ctx.fillStyle = 'rgba(16, 185, 129, 0.50)';
-          ctx.strokeStyle = '#6ee7b7';
-          ctx.lineWidth = 2.6;
+          glassMat.color.setHex(0x10b981);
+          glassMat.opacity = 0.66;
+          edgeMat.color.setHex(0x6ee7b7);
         } else if (isHovered) {
-          ctx.fillStyle = 'rgba(56, 189, 248, 0.44)';
-          ctx.strokeStyle = '#bae6fd';
-          ctx.lineWidth = 2.6;
+          glassMat.color.setHex(0x38bdf8);
+          glassMat.opacity = 0.62;
+          edgeMat.color.setHex(0xbae6fd);
         } else if (isCurrentTargetStep) {
-          const pulse = 0.5 + 0.5 * Math.sin(now * 0.006);
-          ctx.fillStyle = `rgba(56, 189, 248, ${0.19 + pulse * 0.12})`;
-          ctx.strokeStyle = `rgba(125, 211, 252, ${0.75 + pulse * 0.22})`;
-          ctx.lineWidth = 2.1;
+          glassMat.color.setHex(0x7dd3fc);
+          glassMat.opacity = 0.48 + 0.08 * Math.sin(now * 0.006);
+          edgeMat.color.setHex(0x38bdf8);
         } else {
-          ctx.fillStyle = 'rgba(186, 230, 253, 0.15)';
-          ctx.strokeStyle = 'rgba(148, 163, 184, 0.52)';
-          ctx.lineWidth = 1.4;
-        }
-        ctx.fill();
-        ctx.stroke();
-
-        // Abrazaderas metálicas de sujeción en las 4 esquinas del vidrio
-        ctx.fillStyle = '#cbd5e1';
-        [pTL, pTR, pBR, pBL].forEach(corner => {
-          const clampSz = Math.max(1.8, Math.min(5, corner.scale * 0.015));
-          ctx.fillRect(corner.x - clampSz * 0.5, corner.y - clampSz * 0.5, clampSz, clampSz);
-        });
-
-        // Doble línea de reflexión especular del reflector sobre el cristal
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.28)';
-        ctx.lineWidth = 1.1;
-        ctx.beginPath();
-        ctx.moveTo(pTL.x + (pTR.x - pTL.x) * 0.16, pTL.y + (pBL.y - pTL.y) * 0.15);
-        ctx.lineTo(pTL.x + (pTR.x - pTL.x) * 0.58, pTL.y + (pBL.y - pTL.y) * 0.85);
-        ctx.stroke();
-
-        // Grietas radiales si se está rompiendo bajo tus pies
-        if (isCrackingNow) {
-          const midX = (pTL.x + pTR.x + pBR.x + pBL.x) * 0.25;
-          const midY = (pTL.y + pTR.y + pBR.y + pBL.y) * 0.25;
-          ctx.strokeStyle = '#ffffff';
-          ctx.lineWidth = 2.2;
-          for (let c = 0; c < 10; c++) {
-            const ang = (c / 10) * Math.PI * 2 + 0.2;
-            ctx.beginPath();
-            ctx.moveTo(midX, midY);
-            ctx.lineTo(midX + Math.cos(ang) * 36, midY + Math.sin(ang) * 22);
-            ctx.stroke();
-          }
-        }
-
-        if (isCurrentTargetStep || isSafe) {
-          const centerPt = proj(xCenter, 0.01, r);
-          if (centerPt.depth > 0.2) {
-            ctx.fillStyle = isSafe ? '#ecfdf5' : '#e0f2fe';
-            ctx.font = `900 ${Math.max(11, Math.min(20, Math.round(centerPt.scale * 0.15)))}px "JetBrains Mono", monospace`;
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(letters[lane], centerPt.x, centerPt.y);
-          }
-        }
-
-        ctx.restore();
-
-        if (isCurrentTargetStep) {
-          anim.tileHitRegions.push({
-            lane,
-            poly: [pTL, pTR, pBR, pBL]
-          });
+          glassMat.color.setHex(0xbae6fd);
+          glassMat.opacity = 0.38;
+          edgeMat.color.setHex(0x64748b);
         }
       }
     }
 
-    // 8. ONDAS DE IMPACTO Y CANICA 3D
-    for (const w of anim.shockwaves) {
-      const wx = (w.lane - 1.5) * 0.94;
-      const p = proj(wx, 0.01, w.row);
-      if (p.depth <= 0.15) continue;
-      ctx.save();
-      ctx.strokeStyle = `rgba(52, 211, 153, ${w.alpha})`;
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.ellipse(p.x, p.y, w.radius * p.scale * 0.55, w.radius * p.scale * 0.32, 0, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
-    }
+    // 4. Posicionar y animar a los Jugadores 3D (#456, #058, #100) con animación de tensión/agachado sobre el cristal
+    Object.values(playerMeshes).forEach(pm => { pm.visible = false; });
 
-    if (anim.marbleAnim) {
-      const m = anim.marbleAnim;
-      const mt = Math.min(1, (now - m.startTime) / m.duration);
-      const mRow = m.startRow + (m.targetRow - m.startRow) * mt;
-      const mLane = m.startLane + (m.targetLane - m.startLane) * mt;
-      const mY = Math.abs(Math.sin(mt * Math.PI * 2.5)) * (1 - mt * 0.6) * 0.45;
-      const mp = proj((mLane - 1.5) * 0.94, mY, mRow);
-      if (mp.depth > 0.15) {
-        ctx.save();
-        ctx.fillStyle = '#38bdf8';
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.arc(mp.x, mp.y, Math.max(4, mp.scale * 0.045), 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-        ctx.restore();
+    const setPlayerPoseAndTransform = (numStr, rowVal, laneVal, isCrouchingOnGlass, faceTowardZ = -1) => {
+      const pm = playerMeshes[numStr];
+      if (!pm) return;
+      pm.visible = true;
+      const wx = (laneVal - 1.5) * 0.94;
+      const wz = -rowVal;
+      pm.position.set(wx, 0, wz);
+      // Mirar hacia adelante (-Z) o hacia el jugador activo
+      pm.rotation.y = faceTowardZ < 0 ? Math.PI : 0;
+
+      const ud = pm.userData;
+      const phase = now * 0.005 + Number(numStr);
+      const isSpeaking = Boolean(this.isSpeakingNow && anim.activeChatter && anim.activeChatter.speakerNum === numStr);
+
+      if (isCrouchingOnGlass) {
+        // Animación de tensión / agachado equilibrándose sobre el cristal templado
+        const crouchBob = Math.sin(phase * 1.4) * 0.025;
+        const tremble = Math.sin(now * 0.035 + Number(numStr)) * 0.008;
+        ud.bodyGroup.position.y = 0.62 + crouchBob;
+        ud.bodyGroup.rotation.x = 0.24 + Math.sin(phase) * 0.04;
+        ud.bodyGroup.position.x = tremble;
+        ud.leftLegGroup.rotation.x = -0.28;
+        ud.rightLegGroup.rotation.x = 0.22;
+        ud.leftArmGroup.rotation.z = -0.38 - Math.sin(phase) * 0.08;
+        ud.rightArmGroup.rotation.z = 0.38 + Math.sin(phase) * 0.08;
+        ud.leftArmGroup.rotation.x = -0.35;
+        ud.rightArmGroup.rotation.x = -0.35;
+      } else {
+        const idleBob = Math.sin(phase) * 0.015;
+        ud.bodyGroup.position.y = 0.72 + idleBob;
+        ud.bodyGroup.rotation.x = 0.05;
+        ud.bodyGroup.position.x = 0;
+        ud.leftLegGroup.rotation.x = 0;
+        ud.rightLegGroup.rotation.x = 0;
+        ud.leftArmGroup.rotation.z = -0.12;
+        ud.rightArmGroup.rotation.z = 0.12;
+        ud.leftArmGroup.rotation.x = isSpeaking ? -0.45 + Math.sin(now * 0.015) * 0.25 : 0;
+        ud.rightArmGroup.rotation.x = 0;
       }
-      if (mt >= 1) anim.marbleAnim = null;
-    }
 
-    // 9. FRAGMENTOS DE CRISTAL CAYENDO AL ABISMO
-    for (const s of anim.shards) {
-      const p = proj(s.x, s.y, s.z);
-      if (p.depth <= 0.15) continue;
-      ctx.save();
-      ctx.translate(p.x, p.y);
-      ctx.rotate(s.rot);
-      ctx.fillStyle = `rgba(186, 230, 253, ${s.alpha})`;
-      ctx.strokeStyle = `rgba(255, 255, 255, ${s.alpha})`;
-      const sz = Math.max(2, (s.size * p.scale) / 110);
-      ctx.beginPath();
-      ctx.moveTo(0, -sz);
-      ctx.lineTo(sz * 0.9, sz * 0.6);
-      ctx.lineTo(-sz * 0.8, sz * 0.8);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-      ctx.restore();
-    }
+      if (ud.mouthMesh) {
+        ud.mouthMesh.scale.y = isSpeaking ? (1.2 + Math.abs(Math.sin(now * 0.025)) * 2.4) : 1.0;
+      }
+    };
 
-    // 10. JUGADORES 3D REALISTAS CON ROSTROS DETALLADOS Y SOMBRAS DIRECCIONALES EN TIEMPO REAL
-    //     - Los jugadores de atrás (#058 y #100) SIEMPRE existen en el mundo 3D detrás de ti,
-    //       así que cuando giras la cámara 180° (o pulsas "👀 Voltear a ver Atrás"), los ves parados
-    //       detrás de ti con sus rostros, ojos parpadeando, boca moviéndose al hablar y sombra direccional real.
-    const backPlayersToDraw = [];
     if (anim.camMode === 'INTRO_SQUAD') {
-      backPlayersToDraw.push(
-        { number: '100', row: -2.05, lane: 2.02, faceCamera: false, relayTag: false },
-        { number: '058', row: -1.62, lane: 0.98, faceCamera: false, relayTag: false },
-        { number: '456', row: -1.18, lane: 1.50, faceCamera: false, relayTag: false }
-      );
+      setPlayerPoseAndTransform('456', -1.18, 1.50, false, -1);
+      setPlayerPoseAndTransform('058', -1.62, 0.98, false, -1);
+      setPlayerPoseAndTransform('100', -2.05, 2.02, false, -1);
     } else if (anim.camMode === 'RELAY_REVEAL_BEHIND') {
+      setPlayerPoseAndTransform(anim.playerNumber, anim.playerRow, anim.playerLane, anim.playerRow >= 0, -1);
       if (st.lives === 2) {
         const row100 = Math.max(-1.85, anim.playerRow - 0.68);
-        backPlayersToDraw.push({ number: '100', row: row100, lane: 1.92, faceCamera: true, relayTag: false });
+        setPlayerPoseAndTransform('100', row100, 1.92, row100 >= 0, -1);
       }
-      backPlayersToDraw.push({ number: anim.playerNumber, row: anim.playerRow, lane: anim.playerLane, faceCamera: true, relayTag: true });
     } else {
-      // En modo POV normal: posicionar a los compañeros vivos detrás del jugador actual
+      // En modo POV: los jugadores traseros (#058 y #100) están detrás de ti con animación de tensión/agachado sobre el cristal
       if (st.lives >= 3) {
         const row058 = st.currentStep > 0 ? (st.currentStep - 1) : -1.62;
         const lane058 = st.currentStep > 0 && st.safeLaneHistory[st.currentStep - 1] !== undefined
@@ -3077,796 +3720,118 @@ export class ArcadeManager {
         const lane100 = st.currentStep > 1 && st.safeLaneHistory[st.currentStep - 2] !== undefined
           ? st.safeLaneHistory[st.currentStep - 2]
           : 2.02;
-        backPlayersToDraw.push(
-          { number: '100', row: row100, lane: lane100, faceCamera: true, relayTag: false },
-          { number: '058', row: row058, lane: lane058, faceCamera: true, relayTag: false }
-        );
+        setPlayerPoseAndTransform('058', row058, lane058, row058 >= 0, -1);
+        setPlayerPoseAndTransform('100', row100, lane100, row100 >= 0, -1);
       } else if (st.lives === 2) {
         const row100 = st.currentStep > 0 ? (st.currentStep - 1) : -1.68;
         const lane100 = st.currentStep > 0 && st.safeLaneHistory[st.currentStep - 1] !== undefined
           ? st.safeLaneHistory[st.currentStep - 1]
           : 1.85;
-        backPlayersToDraw.push(
-          { number: '100', row: row100, lane: lane100, faceCamera: true, relayTag: false }
-        );
+        setPlayerPoseAndTransform('100', row100, lane100, row100 >= 0, -1);
       }
     }
 
-    // Ordenar jugadores de más lejano a más cercano respecto a la cámara
-    backPlayersToDraw.sort((a, b) => Math.abs(b.row - camZ) - Math.abs(a.row - camZ));
-    for (const bp of backPlayersToDraw) {
-      this.drawRealisticHumanPlayer3D(
-        ctx,
-        proj,
-        bp.number,
-        bp.row,
-        bp.lane,
-        0,
-        now,
-        mainLightX,
-        mainLightY,
-        mainLightZ,
-        bp.faceCamera,
-        bp.relayTag
-      );
+    // 5. Canica 3D si está activa
+    if (anim.marbleAnim) {
+      const m = anim.marbleAnim;
+      const mt = Math.min(1, (now - m.startTime) / m.duration);
+      const mRow = m.startRow + (m.targetRow - m.startRow) * mt;
+      const mLane = m.startLane + (m.targetLane - m.startLane) * mt;
+      const mY = 0.065 + Math.abs(Math.sin(mt * Math.PI * 2.5)) * (1 - mt * 0.6) * 0.45;
+      marbleMesh.visible = true;
+      marbleMesh.position.set((mLane - 1.5) * 0.94, mY, -mRow);
+      if (mt >= 1) {
+        anim.marbleAnim = null;
+        marbleMesh.visible = false;
+      }
+    } else {
+      marbleMesh.visible = false;
     }
 
-    // 11. PIES Y PIERNAS EN POV + SOMBRA DIRECCIONAL PROPIA + MANOS CON 5 DEDOS EN PRIMER PLANO
-    if (anim.camMode !== 'INTRO_SQUAD' && anim.camMode !== 'RELAY_REVEAL_BEHIND') {
-      // Sombra direccional real proyectada por tu propio cuerpo sobre el cristal/plataforma bajo tus pies
-      this.drawCharacterDirectionalShadow3D(
-        ctx,
-        proj,
-        (anim.playerLane - 1.5) * 0.94,
-        0,
-        anim.playerRow,
-        mainLightX,
-        mainLightY,
-        mainLightZ
-      );
+    // Renderizar escena WebGL con sombras dinámicas
+    renderer.render(scene, camera);
 
-      if (pitch > 0.35 && anim.camMode !== 'POV_FALLING') {
-        this.drawPOVFeetOnGlass3D(ctx, proj, anim, W, H, pitch);
+    // 6. Dibujar en el canvas HUD superpuesto tus manos POV / zapatillas al mirar hacia abajo
+    //    y calcular las regiones de clic 2D de los 4 paneles del peldaño actual
+    const ctx = hudCanvas.getContext('2d');
+    if (!ctx) return;
+    const W = hudCanvas.width;
+    const H = hudCanvas.height;
+    ctx.clearRect(0, 0, W, H);
+
+    anim.tileHitRegions = [];
+    const r = st.currentStep;
+    if (r < st.totalSteps && !st.awaitingNextStep && !st.isGameOver && !st.isVictory) {
+      const zNear = -r + 0.36;
+      const zFar = -r - 0.36;
+      for (let lane = 0; lane < 4; lane++) {
+        if (st.tiles[r][lane] === 'broken') continue;
+        const xCenter = (lane - 1.5) * 0.94;
+        const corners = [
+          new THREE.Vector3(xCenter - 0.41, 0, zFar),
+          new THREE.Vector3(xCenter + 0.41, 0, zFar),
+          new THREE.Vector3(xCenter + 0.41, 0, zNear),
+          new THREE.Vector3(xCenter - 0.41, 0, zNear)
+        ];
+        const poly = [];
+        let valid = true;
+        for (const v of corners) {
+          v.project(camera);
+          if (v.z > 1) {
+            valid = false;
+            break;
+          }
+          poly.push({
+            x: (v.x * 0.5 + 0.5) * W,
+            y: (-v.y * 0.5 + 0.5) * H
+          });
+        }
+        if (valid) {
+          anim.tileHitRegions.push({ lane, poly });
+        }
+      }
+    }
+
+    if (anim.camMode !== 'INTRO_SQUAD' && anim.camMode !== 'RELAY_REVEAL_BEHIND') {
+      const pitch = anim.cameraPitch || 0.16;
+      if (pitch > 0.38 && anim.camMode !== 'POV_FALLING') {
+        this.drawPOVFeetOverlay2D(ctx, W, H, pitch);
       }
       this.drawPOVHandsForeground(ctx, W, H, now, anim);
     }
-
-    ctx.restore();
   }
 
-  /**
-   * Dibuja las paredes del coliseo con cortinajes plisados estilo Squid Game y los pilares profundos del abismo
-   */
-  drawColiseumWallsAndAbyss3D(ctx, proj, st, now, W, H) {
-    // 1. Pilares de acero descendiendo hacia el abismo oscuro (y = 0 hasta y = -18)
-    for (let r = -1; r <= st.totalSteps + 1; r += 2) {
-      [-1.88, 1.88].forEach(px => {
-        const pTop = proj(px, -0.06, r);
-        const pBot = proj(px, -16.5, r);
-        if (pTop.depth > 0.2 && pBot.depth > 0.2) {
-          const pillarGrad = ctx.createLinearGradient(pTop.x, pTop.y, pBot.x, pBot.y);
-          pillarGrad.addColorStop(0, 'rgba(159, 18, 57, 0.65)');
-          pillarGrad.addColorStop(0.45, 'rgba(30, 41, 59, 0.45)');
-          pillarGrad.addColorStop(1, 'rgba(2, 6, 23, 0)');
-          ctx.strokeStyle = pillarGrad;
-          ctx.lineWidth = Math.max(1.5, Math.min(8, pTop.scale * 0.032));
-          ctx.beginPath();
-          ctx.moveTo(pTop.x, pTop.y);
-          ctx.lineTo(pBot.x, pBot.y);
-          ctx.stroke();
-        }
-      });
-
-      // Crucetas estructurales en el abismo bajo el puente
-      const cL = proj(-1.88, -2.2, r);
-      const cR = proj(1.88, -2.2, r);
-      if (cL.depth > 0.25 && cR.depth > 0.25) {
-        ctx.strokeStyle = 'rgba(71, 85, 105, 0.28)';
-        ctx.lineWidth = 1.2;
-        ctx.beginPath();
-        ctx.moveTo(cL.x, cL.y);
-        ctx.lineTo(cR.x, cR.y);
-        ctx.stroke();
-      }
-    }
-
-    // 2. Paredes laterales de circo con pliegues verticales carmesí/violeta
-    [-6.2, 6.2].forEach(wallX => {
-      for (let z = -2; z < st.totalSteps + 3; z += 2) {
-        const wTL = proj(wallX, 4.8, z + 2);
-        const wTR = proj(wallX, 4.8, z);
-        const wBR = proj(wallX, -8.0, z);
-        const wBL = proj(wallX, -8.0, z + 2);
-        if (wTL.depth > 0.25 && wTR.depth > 0.25) {
-          const isEven = ((z + 2) / 2) % 2 === 0;
-          ctx.fillStyle = isEven ? 'rgba(136, 19, 55, 0.16)' : 'rgba(76, 5, 25, 0.14)';
-          ctx.strokeStyle = 'rgba(244, 63, 94, 0.15)';
-          ctx.lineWidth = 1;
-          ctx.beginPath();
-          ctx.moveTo(wTL.x, wTL.y);
-          ctx.lineTo(wTR.x, wTR.y);
-          ctx.lineTo(wBR.x, wBR.y);
-          ctx.lineTo(wBL.x, wBL.y);
-          ctx.closePath();
-          ctx.fill();
-          ctx.stroke();
-        }
-      }
-    });
-  }
-
-  /**
-   * Dibuja el techo industrial del coliseo con cerchas metálicas, anillos de luz dorados y haces volumétricos
-   */
-  drawColiseumCeilingAndLights3D(ctx, proj, st, now, mainLightX, mainLightY, mainLightZ) {
-    const roofY = 4.9;
-
-    // Cerchas transversales del techo
-    for (let z = -2; z <= st.totalSteps + 2; z += 2) {
-      const rL = proj(-4.8, roofY, z);
-      const rR = proj(4.8, roofY, z);
-      if (rL.depth > 0.22 && rR.depth > 0.22) {
-        ctx.strokeStyle = 'rgba(100, 116, 139, 0.38)';
-        ctx.lineWidth = Math.max(1, Math.min(4, rL.scale * 0.018));
-        ctx.beginPath();
-        ctx.moveTo(rL.x, rL.y);
-        ctx.lineTo(rR.x, rR.y);
-        ctx.stroke();
-      }
-    }
-
-    // Vigas longitudinales del techo
-    [-3.6, 0, 3.6].forEach(lx => {
-      for (let z = -2; z < st.totalSteps + 2; z += 2) {
-        const p1 = proj(lx, roofY, z);
-        const p2 = proj(lx, roofY, z + 2);
-        if (p1.depth > 0.22 && p2.depth > 0.22) {
-          ctx.strokeStyle = 'rgba(148, 163, 184, 0.30)';
-          ctx.lineWidth = 1.5;
-          ctx.beginPath();
-          ctx.moveTo(p1.x, p1.y);
-          ctx.lineTo(p2.x, p2.y);
-          ctx.stroke();
-        }
-      }
-    });
-
-    // Luminarias circulares cálidas y reflectores volumétricos a lo largo del techo
-    for (let z = 0; z <= st.totalSteps; z += 3) {
-      const lampPt = proj(z % 6 === 0 ? -0.9 : 0.9, roofY - 0.25, z);
-      const floorTarget = proj(0, 0, z);
-      if (lampPt.depth > 0.2) {
-        // Cono de luz volumétrica hacia el puente
-        if (floorTarget.depth > 0.2) {
-          const coneGrad = ctx.createLinearGradient(lampPt.x, lampPt.y, floorTarget.x, floorTarget.y);
-          coneGrad.addColorStop(0, 'rgba(253, 224, 71, 0.20)');
-          coneGrad.addColorStop(0.5, 'rgba(244, 63, 94, 0.07)');
-          coneGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
-          ctx.fillStyle = coneGrad;
-          const spread = Math.max(25, floorTarget.scale * 0.55);
-          ctx.beginPath();
-          ctx.moveTo(lampPt.x - 6, lampPt.y);
-          ctx.lineTo(lampPt.x + 6, lampPt.y);
-          ctx.lineTo(floorTarget.x + spread, floorTarget.y);
-          ctx.lineTo(floorTarget.x - spread, floorTarget.y);
-          ctx.closePath();
-          ctx.fill();
-        }
-
-        // Halo y foco de la lámpara en el techo
-        const rBulb = Math.max(3, Math.min(14, lampPt.scale * 0.045));
-        const glow = ctx.createRadialGradient(lampPt.x, lampPt.y, 1, lampPt.x, lampPt.y, rBulb * 3.2);
-        glow.addColorStop(0, 'rgba(254, 240, 138, 0.95)');
-        glow.addColorStop(0.4, 'rgba(251, 191, 36, 0.45)');
-        glow.addColorStop(1, 'rgba(251, 191, 36, 0)');
-        ctx.fillStyle = glow;
-        ctx.beginPath();
-        ctx.arc(lampPt.x, lampPt.y, rBulb * 3.2, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-  }
-
-  /**
-   * Dibuja la Plataforma de Salida al inicio del puente con su franja de peligro amarilla/negra y barandales
-   * para que cuando estás en el Peldaño 1 se vea claramente que estás en el inicio del puente.
-   */
-  drawStartPlatform3D(ctx, proj, now) {
-    const zFront = -0.52;
-    const zBack = -2.65;
-    const pFL = proj(-2.15, 0, zFront);
-    const pFR = proj(2.15, 0, zFront);
-    const pBR = proj(2.15, 0, zBack);
-    const pBL = proj(-2.15, 0, zBack);
-
-    if (pFL.depth > 0.15 || pFR.depth > 0.15 || pBR.depth > 0.15 || pBL.depth > 0.15) {
-      ctx.save();
-      ctx.fillStyle = '#0f172a';
-      ctx.strokeStyle = '#34d399';
-      ctx.lineWidth = 2.2;
-      ctx.beginPath();
-      ctx.moveTo(pFL.x, pFL.y);
-      ctx.lineTo(pFR.x, pFR.y);
-      ctx.lineTo(pBR.x, pBR.y);
-      ctx.lineTo(pBL.x, pBL.y);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-
-      // Franja de advertencia amarilla/negra en el borde de salida (z = -0.68 a -0.52)
-      const stripes = 10;
-      for (let i = 0; i < stripes; i++) {
-        const x1 = -2.05 + (i / stripes) * 4.10;
-        const x2 = -2.05 + ((i + 1) / stripes) * 4.10;
-        const s1 = proj(x1, 0.005, -0.53);
-        const s2 = proj(x2, 0.005, -0.53);
-        const s3 = proj(x2, 0.005, -0.72);
-        const s4 = proj(x1, 0.005, -0.72);
-        if (s1.depth > 0.15 && s3.depth > 0.15) {
-          ctx.fillStyle = i % 2 === 0 ? '#facc15' : '#090d16';
-          ctx.beginPath();
-          ctx.moveTo(s1.x, s1.y);
-          ctx.lineTo(s2.x, s2.y);
-          ctx.lineTo(s3.x, s3.y);
-          ctx.lineTo(s4.x, s4.y);
-          ctx.closePath();
-          ctx.fill();
-        }
-      }
-
-      // Barandales laterales iluminados de la plataforma de salida
-      [-2.10, 2.10].forEach(rx => {
-        const rFTop = proj(rx, 0.95, zFront);
-        const rBTop = proj(rx, 0.95, zBack);
-        const rFBot = proj(rx, 0, zFront);
-        const rBBot = proj(rx, 0, zBack);
-        if (rFTop.depth > 0.16 && rBTop.depth > 0.16) {
-          ctx.strokeStyle = '#f43f5e';
-          ctx.lineWidth = 2.4;
-          ctx.beginPath();
-          ctx.moveTo(rFTop.x, rFTop.y);
-          ctx.lineTo(rBTop.x, rBTop.y);
-          ctx.moveTo(rFBot.x, rFBot.y);
-          ctx.lineTo(rFTop.x, rFTop.y);
-          ctx.moveTo(rBBot.x, rBBot.y);
-          ctx.lineTo(rBTop.x, rBTop.y);
-          ctx.stroke();
-        }
-      });
-
-      ctx.restore();
-    }
-  }
-
-  /**
-   * Dibuja la Plataforma de Meta VIP al final del puente con su arco neón y los 3 Guardianes Rosas (○ △ □)
-   * proyectando sombras direccionales reales sobre la meta.
-   */
-  drawFinishPlatformAndGuards3D(ctx, proj, st, now, lightX, lightY, lightZ) {
-    const fNear = st.totalSteps - 0.35;
-    const fFar = st.totalSteps + 1.45;
-    const fTL = proj(-2.25, 0, fFar);
-    const fTR = proj(2.25, 0, fFar);
-    const fBR = proj(2.25, 0, fNear);
-    const fBL = proj(-2.25, 0, fNear);
-
-    if (fTL.depth <= 0.18 || fBR.depth <= 0.18) return;
-
-    ctx.save();
-    // Piso de la plataforma de meta
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
-    ctx.strokeStyle = '#34d399';
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.moveTo(fTL.x, fTL.y);
-    ctx.lineTo(fTR.x, fTR.y);
-    ctx.lineTo(fBR.x, fBR.y);
-    ctx.lineTo(fBL.x, fBL.y);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-
-    // Arco Neón de Meta ("META ○ △ □")
-    const archZ = st.totalSteps + 0.95;
-    const aBL = proj(-1.95, 0, archZ);
-    const aTL = proj(-1.95, 2.35, archZ);
-    const aTR = proj(1.95, 2.35, archZ);
-    const aBR = proj(1.95, 0, archZ);
-    if (aTL.depth > 0.2 && aTR.depth > 0.2) {
-      ctx.strokeStyle = '#f43f5e';
-      ctx.lineWidth = Math.max(2.5, aTL.scale * 0.035);
-      ctx.beginPath();
-      ctx.moveTo(aBL.x, aBL.y);
-      ctx.lineTo(aTL.x, aTL.y);
-      ctx.lineTo(aTR.x, aTR.y);
-      ctx.lineTo(aBR.x, aBR.y);
-      ctx.stroke();
-
-      const bannerMid = proj(0, 2.15, archZ);
-      ctx.fillStyle = '#fde047';
-      ctx.font = `900 ${Math.max(9, Math.min(18, Math.round(bannerMid.scale * 0.14)))}px "JetBrains Mono", monospace`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('★ META CACES ○ △ □ ★', bannerMid.x, bannerMid.y);
-    }
-
-    // Los 3 Guardianes de Squid Game custodiando la meta:
-    // Izquierda: Triángulo (△ Soldado armado), Centro: Cuadrado (□ Líder), Derecha: Círculo (○ Guardia)
-    const guards = [
-      { x: -1.15, z: st.totalSteps + 0.55, symbol: 'triangle' },
-      { x: 0.0,   z: st.totalSteps + 0.42, symbol: 'square' },
-      { x: 1.15,  z: st.totalSteps + 0.55, symbol: 'circle' }
-    ];
-
-    guards.forEach(g => {
-      this.drawPinkGuard3D(ctx, proj, g.x, g.z, g.symbol, now, lightX, lightY, lightZ);
-    });
-
-    ctx.restore();
-  }
-
-  /**
-   * Dibuja un Guardián Rosa de Squid Game en 3D con overol carmesí, máscara negra con símbolo (○, △ o □),
-   * rifle y sombra direccional proyectada en tiempo real sobre la plataforma de meta.
-   */
-  drawPinkGuard3D(ctx, proj, wx, wz, symbolType, now, lightX, lightY, lightZ) {
-    // 1. Sombra direccional real en el suelo de la meta
-    this.drawCharacterDirectionalShadow3D(ctx, proj, wx, 0, wz, lightX, lightY, lightZ);
-
-    const basePt = proj(wx, 0, wz);
-    const headPt = proj(wx, 1.48, wz);
-    if (basePt.depth <= 0.2 || headPt.depth <= 0.2) return;
-
-    const hPx = Math.max(12, Math.abs(basePt.y - headPt.y));
-    const wPx = hPx * 0.42;
-
-    ctx.save();
-    // Piernas del overol rosa
-    ctx.strokeStyle = '#be123c';
-    ctx.lineWidth = Math.max(2, wPx * 0.28);
-    ctx.lineCap = 'round';
-    [-wPx * 0.24, wPx * 0.24].forEach(lx => {
-      ctx.beginPath();
-      ctx.moveTo(basePt.x + lx, basePt.y - hPx * 0.42);
-      ctx.lineTo(basePt.x + lx, basePt.y);
-      ctx.stroke();
-    });
-
-    // Torso con overol rosa intenso y cinturón táctico negro
-    const torsoGrad = ctx.createLinearGradient(basePt.x - wPx * 0.5, headPt.y, basePt.x + wPx * 0.5, basePt.y);
-    torsoGrad.addColorStop(0, '#fb7185');
-    torsoGrad.addColorStop(0.5, '#e11d48');
-    torsoGrad.addColorStop(1, '#881337');
-    ctx.fillStyle = torsoGrad;
-    ctx.beginPath();
-    ctx.roundRect(basePt.x - wPx * 0.52, basePt.y - hPx * 0.80, wPx * 1.04, hPx * 0.44, Math.max(2, wPx * 0.18));
-    ctx.fill();
-
-    // Cinturón negro y cierre central
-    ctx.fillStyle = '#090d16';
-    ctx.fillRect(basePt.x - wPx * 0.52, basePt.y - hPx * 0.48, wPx * 1.04, Math.max(2, hPx * 0.06));
-
-    // Rifle táctico cruzado sobre el pecho
-    ctx.strokeStyle = '#0f172a';
-    ctx.lineWidth = Math.max(2, wPx * 0.18);
-    ctx.beginPath();
-    ctx.moveTo(basePt.x - wPx * 0.55, basePt.y - hPx * 0.68);
-    ctx.lineTo(basePt.x + wPx * 0.58, basePt.y - hPx * 0.46);
-    ctx.stroke();
-
-    // Capucha rosa y máscara negra de esgrima
-    const rHead = Math.max(4, hPx * 0.17);
-    const hx = headPt.x;
-    const hy = basePt.y - hPx * 0.90;
-
-    ctx.fillStyle = '#e11d48';
-    ctx.beginPath();
-    ctx.arc(hx, hy, rHead * 1.18, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = '#090d16';
-    ctx.beginPath();
-    ctx.arc(hx, hy, rHead * 0.95, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Símbolo geométrico blanco brillante en la máscara (○, △ o □)
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = Math.max(1.4, rHead * 0.24);
-    const symR = rHead * 0.52;
-    if (symbolType === 'circle') {
-      ctx.beginPath();
-      ctx.arc(hx, hy, symR, 0, Math.PI * 2);
-      ctx.stroke();
-    } else if (symbolType === 'triangle') {
-      ctx.beginPath();
-      ctx.moveTo(hx, hy - symR);
-      ctx.lineTo(hx + symR * 0.95, hy + symR * 0.8);
-      ctx.lineTo(hx - symR * 0.95, hy + symR * 0.8);
-      ctx.closePath();
-      ctx.stroke();
-    } else {
-      ctx.strokeRect(hx - symR * 0.85, hy - symR * 0.85, symR * 1.7, symR * 1.7);
-    }
-
-    ctx.restore();
-  }
-
-  /**
-   * Dibuja las vigas de acero rosas en 3D con cara superior y lateral a lo largo del puente
-   */
-  drawSteelBridgeRails3D(ctx, proj, st) {
-    [-1.88, -0.94, 0, 0.94, 1.88].forEach(railX => {
-      for (let z = -1; z < st.totalSteps + 1; z++) {
-        const p1 = proj(railX, -0.03, z);
-        const p2 = proj(railX, -0.03, z + 1);
-        const p1Bot = proj(railX, -0.14, z);
-        const p2Bot = proj(railX, -0.14, z + 1);
-
-        if (p1.depth > 0.16 && p2.depth > 0.16) {
-          // Cara lateral de la viga I de acero
-          ctx.fillStyle = 'rgba(159, 18, 57, 0.78)';
-          ctx.beginPath();
-          ctx.moveTo(p1.x, p1.y);
-          ctx.lineTo(p2.x, p2.y);
-          ctx.lineTo(p2Bot.x, p2Bot.y);
-          ctx.lineTo(p1Bot.x, p1Bot.y);
-          ctx.closePath();
-          ctx.fill();
-
-          // Borde superior metálico brillante
-          ctx.strokeStyle = '#fb7185';
-          ctx.lineWidth = Math.max(1.5, Math.min(6, p1.scale * 0.022));
-          ctx.beginPath();
-          ctx.moveTo(p1.x, p1.y);
-          ctx.lineTo(p2.x, p2.y);
-          ctx.stroke();
-        }
-      }
-    });
-  }
-
-  /**
-   * Proyecta en tiempo real la Sombra Direccional anatómica de un personaje sobre el plano del suelo/vidrio
-   * calculando la intersección exacta rayo-plano desde el reflector superior (lightX, lightY, lightZ).
-   */
-  drawCharacterDirectionalShadow3D(ctx, proj, charX, floorY, charZ, lightX, lightY, lightZ) {
-    // Puntos 3D del esqueleto del personaje (pies, cadera, hombros, cabeza y manos)
-    const footL = this.projectDirectionalShadowPoint(charX - 0.14, floorY + 0.02, charZ, floorY, lightX, lightY, lightZ, proj);
-    const footR = this.projectDirectionalShadowPoint(charX + 0.14, floorY + 0.02, charZ, floorY, lightX, lightY, lightZ, proj);
-    const shldrL = this.projectDirectionalShadowPoint(charX - 0.24, floorY + 1.15, charZ, floorY, lightX, lightY, lightZ, proj);
-    const shldrR = this.projectDirectionalShadowPoint(charX + 0.24, floorY + 1.15, charZ, floorY, lightX, lightY, lightZ, proj);
-    const headTop = this.projectDirectionalShadowPoint(charX, floorY + 1.56, charZ, floorY, lightX, lightY, lightZ, proj);
-
-    if (footL.depth <= 0.16 || headTop.depth <= 0.16) return;
-
-    ctx.save();
-    const shadGrad = ctx.createLinearGradient(footL.x, footL.y, headTop.x, headTop.y);
-    shadGrad.addColorStop(0, 'rgba(2, 6, 23, 0.72)');
-    shadGrad.addColorStop(0.65, 'rgba(2, 6, 23, 0.42)');
-    shadGrad.addColorStop(1, 'rgba(2, 6, 23, 0.08)');
-
-    ctx.fillStyle = shadGrad;
-    ctx.beginPath();
-    ctx.moveTo(footL.x, footL.y);
-    ctx.lineTo(footR.x, footR.y);
-    ctx.lineTo(shldrR.x, shldrR.y);
-    ctx.lineTo(headTop.x, headTop.y);
-    ctx.lineTo(shldrL.x, shldrL.y);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
-  }
-
-  /**
-   * Dibuja un Jugador Humano 3D Realista (#456, #058 o #100) con:
-   * - Sombra direccional proyectada en tiempo real desde los reflectores superiores
-   * - Zapatillas blancas detalladas, piernas con rodillas y franjas laterales
-   * - Chaqueta deportiva verde Squid Game con cierre, cuello y parche numérico
-   * - Brazos articulados y manos con 5 dedos individuales (nunca círculos)
-   * - Rostro humano realista (ojos con iris/pupilas y parpadeo, cejas, nariz con relieve,
-   *   boca que se mueve cuando el personaje está hablando y peinado diferenciado).
-   */
-  drawRealisticHumanPlayer3D(ctx, proj, numberStr, row, lane, liftY, now, lightX, lightY, lightZ, showFrontFace = true, isRelayHighlight = false) {
-    const wx = (lane - 1.5) * 0.94;
-    const bobY = Math.sin(now * 0.0045 + Number(numberStr)) * 0.02;
-    const wy = liftY + bobY;
-
-    // 1. Sombra direccional geométrica en tiempo real sobre la plataforma o vidrio
-    this.drawCharacterDirectionalShadow3D(ctx, proj, wx, 0, row, lightX, lightY, lightZ);
-
-    const basePt = proj(wx, wy, row);
-    const headPt = proj(wx, wy + 1.54, row);
-    if (basePt.depth <= 0.18 || headPt.depth <= 0.18) return;
-
-    const totalH = Math.max(18, Math.abs(basePt.y - headPt.y));
-    const s = totalH / 64;
-
-    const st = this.bridgeState;
-    const isThisPlayerSpeaking = Boolean(
-      this.isSpeakingNow &&
-      st &&
-      st.anim &&
-      st.anim.activeChatter &&
-      st.anim.activeChatter.speakerNum === numberStr
-    );
-
-    ctx.save();
-    ctx.translate(basePt.x, basePt.y);
-
-    // 2. Piernas articuladas (muslo + rodilla + pantorrilla) y zapatillas blancas
-    [-6.2 * s, 6.2 * s].forEach((lx, idx) => {
-      const dir = idx === 0 ? -1 : 1;
-      // Pantalón deportivo verde oscuro con sombreado cilíndrico
-      ctx.strokeStyle = '#0f766e';
-      ctx.lineWidth = Math.max(2.5, 6.2 * s);
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(lx, -25 * s);
-      ctx.lineTo(lx + dir * 0.8 * s, -12 * s);
-      ctx.lineTo(lx, -2.5 * s);
-      ctx.stroke();
-
-      // Doble franja blanca lateral del pantalón
-      ctx.strokeStyle = '#f8fafc';
-      ctx.lineWidth = Math.max(1, 1.2 * s);
-      ctx.beginPath();
-      ctx.moveTo(lx + dir * 2.6 * s, -24 * s);
-      ctx.lineTo(lx + dir * 2.6 * s, -3 * s);
-      ctx.stroke();
-
-      // Zapatilla blanca con suela y puntera
-      ctx.fillStyle = '#f8fafc';
-      ctx.strokeStyle = '#64748b';
-      ctx.lineWidth = Math.max(1, 1.1 * s);
-      ctx.beginPath();
-      ctx.ellipse(lx + dir * 0.6 * s, -1 * s, 5.2 * s, 2.6 * s, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-    });
-
-    // 3. Torso con sombreado 3D, cierre central blanco, cuello y parche numérico
-    const torsoGrad = ctx.createLinearGradient(-14 * s, -50 * s, 14 * s, -24 * s);
-    torsoGrad.addColorStop(0, '#14b8a6');
-    torsoGrad.addColorStop(0.5, '#0d9488');
-    torsoGrad.addColorStop(1, '#115e59');
-    ctx.fillStyle = torsoGrad;
-    ctx.strokeStyle = '#042f2e';
-    ctx.lineWidth = Math.max(1, 1.2 * s);
-    ctx.beginPath();
-    ctx.roundRect(-13.5 * s, -48 * s, 27 * s, 25 * s, 6 * s);
-    ctx.fill();
-    ctx.stroke();
-
-    // Cierre vertical blanco de la chaqueta
-    ctx.strokeStyle = '#e2e8f0';
-    ctx.lineWidth = Math.max(1, 1.3 * s);
-    ctx.beginPath();
-    ctx.moveTo(0, -48 * s);
-    ctx.lineTo(0, -23 * s);
-    ctx.stroke();
-
-    // Parche blanco con el número del jugador (#456, #058, #100)
-    ctx.fillStyle = '#f8fafc';
-    ctx.strokeStyle = '#0f172a';
-    ctx.lineWidth = Math.max(0.8, 0.9 * s);
-    ctx.beginPath();
-    ctx.roundRect(-10.5 * s, -41 * s, 21 * s, 10.5 * s, 2.2 * s);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.fillStyle = '#0f172a';
-    ctx.font = `900 ${Math.max(8, Math.round(7.8 * s))}px "JetBrains Mono", monospace`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(numberStr, 0, -35.6 * s);
-
-    // 4. Brazos articulados y manos realistas con 5 dedos individuales
-    [-1, 1].forEach(dir => {
-      const wave = isThisPlayerSpeaking ? Math.sin(now * 0.015) * 3.5 * s : 0;
-      const shX = dir * 14 * s;
-      const shY = -45 * s;
-      const elbX = dir * 17.5 * s;
-      const elbY = -34 * s - wave * 0.5;
-      const wristX = dir * 15.5 * s;
-      const wristY = -24 * s - wave;
-
-      ctx.strokeStyle = '#0d9488';
-      ctx.lineWidth = Math.max(2.2, 5.0 * s);
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(shX, shY);
-      ctx.lineTo(elbX, elbY);
-      ctx.lineTo(wristX, wristY);
-      ctx.stroke();
-
-      // Palma de la mano + 5 dedos articulados
-      ctx.fillStyle = '#f1c27d';
-      ctx.beginPath();
-      ctx.ellipse(wristX, wristY + 1.5 * s, 2.8 * s, 2.4 * s, 0, 0, Math.PI * 2);
-      ctx.fill();
-
-      for (let f = -2; f <= 2; f++) {
-        const fx = wristX + f * 0.95 * s;
-        const fy = wristY + 3.2 * s;
-        ctx.beginPath();
-        ctx.roundRect(fx - 0.4 * s, fy, 0.8 * s, 2.4 * s, 0.4 * s);
-        ctx.fill();
-      }
-    });
-
-    // 5. Cuello, Cabeza Anatómica y Rostro Humano Realista
-    ctx.fillStyle = '#e0ac69';
-    ctx.fillRect(-3.2 * s, -52 * s, 6.4 * s, 5 * s);
-
-    const headY = -58.5 * s;
-    const headR = 8.6 * s;
-
-    // Orejas
-    ctx.fillStyle = '#e0ac69';
-    [-headR * 0.95, headR * 0.95].forEach(ex => {
-      ctx.beginPath();
-      ctx.ellipse(ex, headY + 0.5 * s, 1.8 * s, 3.0 * s, 0, 0, Math.PI * 2);
-      ctx.fill();
-    });
-
-    // Rostro con sombreado 3D radial
-    const faceGrad = ctx.createRadialGradient(-2 * s, headY - 2 * s, 1 * s, 0, headY, headR * 1.1);
-    faceGrad.addColorStop(0, '#ffdbac');
-    faceGrad.addColorStop(0.65, '#f1c27d');
-    faceGrad.addColorStop(1, '#c68642');
-    ctx.fillStyle = faceGrad;
-    ctx.beginPath();
-    ctx.ellipse(0, headY, headR * 0.92, headR * 1.06, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Cabello detallado según el jugador (#100 canoso/veterano, #058 y #456 pelinegro con volumen)
-    ctx.fillStyle = numberStr === '100' ? '#475569' : '#0f172a';
-    ctx.beginPath();
-    ctx.arc(0, headY - 1.8 * s, headR * 0.98, Math.PI * 0.92, Math.PI * 2.08);
-    ctx.fill();
-
-    if (showFrontFace) {
-      // Cejas expresivas
-      ctx.strokeStyle = numberStr === '100' ? '#334155' : '#0f172a';
-      ctx.lineWidth = Math.max(1, 1.3 * s);
-      [-1, 1].forEach(dir => {
-        ctx.beginPath();
-        ctx.moveTo(dir * 1.5 * s, headY - 2.2 * s);
-        ctx.lineTo(dir * 5.2 * s, headY - 2.8 * s);
-        ctx.stroke();
-      });
-
-      // Ojos con esclera blanca, iris, pupila y parpadeo natural
-      const isBlinking = (Math.floor(now / 180) % 23 === 0);
-      [-3.3 * s, 3.3 * s].forEach(ox => {
-        if (isBlinking) {
-          ctx.strokeStyle = '#0f172a';
-          ctx.lineWidth = Math.max(1, 1.1 * s);
-          ctx.beginPath();
-          ctx.moveTo(ox - 1.8 * s, headY - 0.5 * s);
-          ctx.lineTo(ox + 1.8 * s, headY - 0.5 * s);
-          ctx.stroke();
-        } else {
-          ctx.fillStyle = '#ffffff';
-          ctx.beginPath();
-          ctx.ellipse(ox, headY - 0.5 * s, 1.9 * s, 1.25 * s, 0, 0, Math.PI * 2);
-          ctx.fill();
-
-          ctx.fillStyle = '#1e293b';
-          ctx.beginPath();
-          ctx.arc(ox, headY - 0.5 * s, 0.95 * s, 0, Math.PI * 2);
-          ctx.fill();
-
-          ctx.fillStyle = '#ffffff';
-          ctx.beginPath();
-          ctx.arc(ox - 0.3 * s, headY - 0.8 * s, 0.35 * s, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      });
-
-      // Nariz con relieve
-      ctx.strokeStyle = 'rgba(146, 64, 14, 0.65)';
-      ctx.lineWidth = Math.max(0.9, 1.0 * s);
-      ctx.beginPath();
-      ctx.moveTo(0, headY - 0.8 * s);
-      ctx.lineTo(-0.7 * s, headY + 2.2 * s);
-      ctx.lineTo(0.8 * s, headY + 2.2 * s);
-      ctx.stroke();
-
-      // Boca realista (se abre y anima en tiempo real cuando el jugador te está hablando)
-      const mouthY = headY + 4.6 * s;
-      if (isThisPlayerSpeaking) {
-        const openH = (1.2 + Math.abs(Math.sin(now * 0.022)) * 2.2) * s;
-        ctx.fillStyle = '#7f1d1d';
-        ctx.strokeStyle = '#450a0a';
-        ctx.lineWidth = Math.max(0.8, 0.9 * s);
-        ctx.beginPath();
-        ctx.ellipse(0, mouthY, 2.6 * s, openH, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-      } else {
-        ctx.strokeStyle = '#7c2d12';
-        ctx.lineWidth = Math.max(1, 1.2 * s);
-        ctx.beginPath();
-        ctx.moveTo(-2.4 * s, mouthY);
-        ctx.quadraticCurveTo(0, mouthY + 0.8 * s, 2.4 * s, mouthY);
-        ctx.stroke();
-      }
-    }
-
-    // Etiqueta de identificación o relevo sobre el jugador
-    if (isRelayHighlight || isThisPlayerSpeaking) {
-      const labelTxt = isRelayHighlight
-        ? `⬆️ TOMA EL RELEVO #${numberStr}`
-        : `🗣️ #${numberStr} HABLANDO`;
-      ctx.fillStyle = isRelayHighlight ? '#fbbf24' : '#10b981';
-      ctx.strokeStyle = '#0f172a';
-      ctx.lineWidth = 1.8;
-      ctx.beginPath();
-      ctx.roundRect(-64, headY - 26 * s, 128, 20, 7);
-      ctx.fill();
-      ctx.stroke();
-
-      ctx.fillStyle = '#0f172a';
-      ctx.font = '900 10px "JetBrains Mono", monospace';
-      ctx.fillText(labelTxt, 0, headY - 26 * s + 10);
-    }
-
-    ctx.restore();
-  }
-
-  /**
-   * Dibuja tus propias piernas y zapatillas blancas paradas directamente sobre el peldaño
-   * cuando miras hacia abajo en POV.
-   */
-  drawPOVFeetOnGlass3D(ctx, projFn, anim, W, H, pitch) {
-    const visibility = Math.min(1, Math.max(0, (pitch - 0.35) / 0.45));
+  drawPOVFeetOverlay2D(ctx, W, H, pitch) {
+    const visibility = Math.min(1, Math.max(0, (pitch - 0.38) / 0.45));
     if (visibility <= 0.02) return;
 
-    const baseX = (anim.playerLane - 1.5) * 0.94;
-    const baseZ = anim.playerRow + 0.05;
+    const footY = H - 28 * visibility;
+    const centerX = W * 0.5;
+    const spread = Math.min(48, W * 0.09);
 
     ctx.save();
-    ctx.globalAlpha = visibility * 0.96;
-
+    ctx.globalAlpha = visibility * 0.95;
     [-1, 1].forEach(dir => {
-      const footWorldX = baseX + dir * 0.14;
-      const heelPt = projFn(footWorldX, 0.01, baseZ - 0.06);
-      const toePt = projFn(footWorldX, 0.01, baseZ + 0.16);
-      if (heelPt.depth <= 0.15 || toePt.depth <= 0.15) return;
+      const fx = centerX + dir * spread;
+      ctx.fillStyle = '#0d9488';
+      ctx.beginPath();
+      ctx.roundRect(fx - 15, footY - 18, 30, 28, 6);
+      ctx.fill();
 
-      const fx = (heelPt.x + toePt.x) * 0.5;
-      const fy = (heelPt.y + toePt.y) * 0.5;
-      const footLen = Math.max(22, Math.min(58, Math.hypot(toePt.x - heelPt.x, toePt.y - heelPt.y) * 1.15));
-      const footWid = footLen * 0.48;
+      ctx.fillStyle = '#f8fafc';
+      ctx.fillRect(fx + dir * 10, footY - 18, 3.5, 26);
 
       ctx.fillStyle = '#f8fafc';
       ctx.strokeStyle = '#64748b';
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.ellipse(fx, fy, footWid, footLen * 0.55, dir * 0.06, 0, Math.PI * 2);
+      ctx.ellipse(fx, footY - 24, 15, 25, dir * 0.06, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
-
-      ctx.strokeStyle = '#94a3b8';
-      ctx.lineWidth = 1.4;
-      ctx.beginPath();
-      ctx.moveTo(fx - footWid * 0.45, fy - footLen * 0.1);
-      ctx.lineTo(fx + footWid * 0.45, fy - footLen * 0.1);
-      ctx.stroke();
-
-      ctx.fillStyle = '#0d9488';
-      ctx.beginPath();
-      ctx.roundRect(fx - footWid * 0.85, fy + footLen * 0.15, footWid * 1.7, footLen * 0.55, 6);
-      ctx.fill();
     });
-
     ctx.restore();
   }
 
-  /**
-   * Dibuja en primer plano las manos articuladas con 5 dedos y mangas del jugador activo (#456, #058 o #100)
-   */
   drawPOVHandsForeground(ctx, W, H, now, anim) {
     const activeNum = anim.playerNumber || '456';
     const swayX = Math.sin(now * 0.0035) * 4;
@@ -3914,7 +3879,6 @@ export class ArcadeManager {
       ctx.ellipse(handX, handY, 9.5, 7.5, dir * -0.25, 0, Math.PI * 2);
       ctx.fill();
 
-      // Pulgar + 4 dedos individuales
       ctx.beginPath();
       ctx.roundRect(handX + dir * 6.5, handY - 3, 3.5, 6.5, 1.5);
       ctx.fill();
@@ -4166,9 +4130,6 @@ export class ArcadeManager {
     this.renderHangmanUI();
   }
 
-  // =========================================================================
-  // RANKING TOP ARCADE EN VIVO (CUENTAS Y FOTOS REALES DE GOOGLE / SUPABASE)
-  // =========================================================================
   async renderArcadeLeaderboard() {
     const container = document.getElementById('arcade-leaderboard-list');
     if (!container) return;
