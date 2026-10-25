@@ -1,4 +1,4 @@
-const CACHE_NAME = 'caces-medprep-v18-realistic-360';
+const CACHE_NAME = 'caces-medprep-v19-threejs-webgl';
 const CORE_ASSETS = [
   './',
   './index.html',
@@ -16,7 +16,8 @@ const CORE_ASSETS = [
   './js/games.js',
   './js/pdf-importer.js',
   './js/supabase-config.js',
-  './data/banco_inicial.json'
+  './data/banco_inicial.json',
+  'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js'
 ];
 
 self.addEventListener('install', (event) => {
@@ -57,7 +58,7 @@ self.addEventListener('fetch', (event) => {
 
   if (isCodeOrMarkup) {
     const cleanUrl = (url.pathname.endsWith('/games.js') || url.pathname.endsWith('/app.js'))
-      ? `${url.origin}${url.pathname}?v=18`
+      ? `${url.origin}${url.pathname}?v=19`
       : req.url;
 
     event.respondWith(
