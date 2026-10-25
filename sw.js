@@ -1,4 +1,4 @@
-const CACHE_NAME = 'caces-medprep-v10';
+const CACHE_NAME = 'caces-medprep-v16-pov-audio';
 const CORE_ASSETS = [
   './',
   './index.html',
@@ -20,12 +20,13 @@ const CORE_ASSETS = [
 ];
 
 self.addEventListener('install', (event) => {
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(CORE_ASSETS).catch((err) => {
         console.warn('Pre-cache parcial advertencia:', err);
       });
-    }).then(() => self.skipWaiting())
+    })
   );
 });
 
@@ -55,8 +56,13 @@ self.addEventListener('fetch', (event) => {
     url.pathname.endsWith('.css');
 
   if (isCodeOrMarkup) {
+    // Si piden games.js o app.js con un ?v= viejo, forzar descarga fresca sin caché del navegador (no-store)
+    const cleanUrl = (url.pathname.endsWith('/games.js') || url.pathname.endsWith('/app.js'))
+      ? `${url.origin}${url.pathname}?v=16`
+      : req.url;
+
     event.respondWith(
-      fetch(req)
+      fetch(cleanUrl, { cache: 'no-store' })
         .then((networkResp) => {
           if (networkResp && networkResp.status === 200) {
             const respClone = networkResp.clone();
