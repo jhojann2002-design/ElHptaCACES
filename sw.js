@@ -1,4 +1,4 @@
-const CACHE_NAME = 'caces-medprep-v19-threejs-webgl';
+const CACHE_NAME = 'caces-medprep-v20-threejs-faces';
 const CORE_ASSETS = [
   './',
   './index.html',
@@ -58,7 +58,7 @@ self.addEventListener('fetch', (event) => {
 
   if (isCodeOrMarkup) {
     const cleanUrl = (url.pathname.endsWith('/games.js') || url.pathname.endsWith('/app.js'))
-      ? `${url.origin}${url.pathname}?v=19`
+      ? `${url.origin}${url.pathname}?v=20`
       : req.url;
 
     event.respondWith(
@@ -85,7 +85,7 @@ self.addEventListener('fetch', (event) => {
         return networkResp;
       }).catch(() => {});
 
-      return cachedResp || fetchPromise;
+      return cachedResp || fetchPromise
     })
   );
 });
