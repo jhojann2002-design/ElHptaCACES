@@ -1,20 +1,22 @@
 /**
- * MOTOR ARCADE EHEP 3D - EL HPTA CACES (VERSIÓN v17: POV REAL SOBRE EL PELDAÑO + RELEVO CINEMÁTICO + FRASES ULEAM/CACES)
+ * MOTOR ARCADE EHEP 3D - EL HPTA CACES (VERSIÓN v18: MOTOR 3D REALISTA + CÁMARA LIBRE 360° + SOMBRAS DIRECCIONALES + GUARDIANES + ROSTROS)
  * Incluye 2 Juegos Oficiales de Alto Rendimiento:
  *   1. El Puente de Cristal CACES (#456, #058, #100):
- *      - Portal en Pantalla Completa real (montado en document.body sin barra superior ni ranking).
- *      - Matriz de rotación de cámara 3D real (Pitch 3D):
- *        a) Al saltar caes EXACTAMENTE encima del peldaño elegido (no atrás).
- *        b) La cámara inclina la vista hacia tus pies (60°) viendo tus zapatillas blancas paradas
- *           sobre el cristal para comprobar si se rompe o si es vidrio templado, y luego levanta
- *           la mirada hacia adelante (viendo ya el siguiente peldaño frente a ti).
- *        c) Al perder una vida, tras caer al vacío en POV, la cámara hace una transición cinemática
- *           suave enfocando primero al jugador que estaba atrás (#058 o #100) parado en el peldaño
- *           anterior, acercándose a sus ojos para entrar en su POV antes de que salte al vidrio templado.
- *        d) Diálogos controlados (máximo 1 vez por peldaño, nunca cada 2 segundos), incluyendo frases
- *           de la ULEAM ("todo D de Diosito"), la rural, primer semestre, tirar la canica y el comodín
- *           del 50/50. Cuando queda la última vida (#100), los diálogos cambian a monólogo interno en POV.
- *        e) Latidos cardíacos progresivos (LUB-DUB) y música ambiental oscura estilo Squid Game.
+ *      - Lente Gran Angular POV + Cámara Interactiva 360° (arrastra con el dedo/mouse o usa el botón
+ *        "👀 Mirar Atrás" para voltear 180° y ver a los jugadores #058 y #100 detrás de ti, mirar arriba
+ *        al techo/luces o abajo al abismo).
+ *      - Salto POV con aterrizaje exacto sobre el peldaño elegido (mirando tus pies sobre el vidrio
+ *        con espesor 3D y abrazaderas metálicas, y levantando luego la vista al frente).
+ *      - Plataforma de Salida real al inicio del Peldaño 1 (con franja de peligro amarilla/negra y pórtico)
+ *        y Plataforma de Meta al final con los 3 Guardianes Rosas 3D (○ △ □) armados y arco neón.
+ *      - Entorno 3D completo: Techo abovedado con vigas de acero, lámparas colgantes y reflectores
+ *        volumétricos, cortinajes del coliseo y abismo profundo con pilares estructurales y niebla.
+ *      - Sombras direccionales en tiempo real proyectadas geométricamente (ray-plane intersection)
+ *        desde los reflectores superiores sobre la plataforma y los cristales (cero elipses falsas).
+ *      - Jugadores 3D realistas con rostro detallado (ojos con iris/pupilas y parpadeo, cejas, nariz,
+ *        boca animada cuando hablan, cabello, uniforme con cierre y pliegues, y manos con 5 dedos).
+ *      - Diálogos máximo 1 vez por peldaño (ULEAM "todo D de Diosito", rural, primer semestre,
+ *        tirar la canica, comodín 50/50, y monólogo POV en la última vida).
  *   2. Ahorcado Clínico MSP (Diagnósticos, Fármacos de Elección y Epónimos CACES)
  *   + Ranking Top Arcade en Vivo con Cuentas y Fotos Reales de Google (Supabase).
  */
@@ -60,6 +62,7 @@ export class ArcadeManager {
     this.chatterHideTimer = null;
     this.musicStepIndex = 0;
     this.lastChatterIndex = -1;
+    this.isSpeakingNow = false;
     this.questionsPool = [];
     this._audioUnlockBound = false;
     this.bindMobileAudioUnlock();
@@ -207,9 +210,6 @@ export class ArcadeManager {
     return html;
   }
 
-  /**
-   * Renderiza las 3 vidas como los 3 Jugadores (#456, #058, #100) indicando quién tiene el POV activo
-   */
   renderSquadPlayersHUD(lives = 3) {
     const roster = [
       { num: '456', aliveAt: 3 },
@@ -230,10 +230,6 @@ export class ArcadeManager {
     }).join('');
   }
 
-  /**
-   * Oculta o restaura absolutamente toda la interfaz externa (barra superior, ranking, footer)
-   * para que cuando El Puente de Cristal esté en pantalla completa SOLO exista el juego.
-   */
   setExternalPageChromeHidden(hide = true) {
     const headerEl = document.querySelector('header');
     const footerEl = document.querySelector('footer');
@@ -279,9 +275,6 @@ export class ArcadeManager {
     window.addEventListener('keydown', unlock, { passive: true });
   }
 
-  /**
-   * Calcula los latidos por minuto (BPM) en tiempo real según el peldaño actual y las vidas restantes.
-   */
   getBridgeCurrentBPM() {
     const st = this.bridgeState;
     if (!st) return 74;
@@ -291,9 +284,6 @@ export class ArcadeManager {
     return Math.min(152, Math.max(72, 72 + stepFactor + livesLostFactor + jumpingBoost));
   }
 
-  /**
-   * Reproduce un latido cardíaco realista de doble golpe (LUB-DUB) que se intensifica al avanzar.
-   */
   playHeartbeatLubDub() {
     if (!this.sfxEnabled) return;
     try {
@@ -310,7 +300,6 @@ export class ArcadeManager {
       const livesStress = st ? (3 - st.lives) * 0.25 : 0;
       const intensity = Math.min(1.45, 0.78 + stepProgress * 0.48 + livesStress);
 
-      // Golpe 1: LUB
       const lubOsc = ctx.createOscillator();
       const lubSub = ctx.createOscillator();
       const lubFilter = ctx.createBiquadFilter();
@@ -342,7 +331,6 @@ export class ArcadeManager {
       lubOsc.stop(now + 0.16);
       lubSub.stop(now + 0.16);
 
-      // Golpe 2: DUB (185ms después)
       const dubStart = now + 0.185;
       const dubOsc = ctx.createOscillator();
       const dubFilter = ctx.createBiquadFilter();
@@ -383,9 +371,6 @@ export class ArcadeManager {
     } catch (e) {}
   }
 
-  /**
-   * Reproduce la música ambiental oscura de suspenso estilo Squid Game (ostinato menor + pad atmosférico)
-   */
   playBridgeAmbientMusicStep() {
     if (!this.sfxEnabled) return;
     try {
@@ -423,7 +408,7 @@ export class ArcadeManager {
           padFilter.frequency.linearRampToValueAtTime(390, now + 1.1);
           padFilter.frequency.linearRampToValueAtTime(190, now + 2.3);
 
-          const maxGain = idx === 0 ? 0.045 : 0.024;
+          const maxGain = idx === 0 ? 0.042 : 0.022;
           padGain.gain.setValueAtTime(0.0001, now);
           padGain.gain.linearRampToValueAtTime(maxGain, now + 0.45);
           padGain.gain.exponentialRampToValueAtTime(0.0008, now + 2.35);
@@ -450,7 +435,7 @@ export class ArcadeManager {
       pluckFilter.frequency.exponentialRampToValueAtTime(360, now + 0.36);
 
       pluckGain.gain.setValueAtTime(0.001, now);
-      pluckGain.gain.linearRampToValueAtTime(0.048, now + 0.015);
+      pluckGain.gain.linearRampToValueAtTime(0.044, now + 0.015);
       pluckGain.gain.exponentialRampToValueAtTime(0.0008, now + 0.42);
 
       pluckOsc.connect(pluckFilter);
@@ -511,9 +496,6 @@ export class ArcadeManager {
     }
   }
 
-  // =========================================================================
-  // MOTOR DE AUDIO SINTETIZADO PRO
-  // =========================================================================
   playTone(type = 'click') {
     if (!this.sfxEnabled) return;
     try {
@@ -681,6 +663,7 @@ export class ArcadeManager {
     this.sfxEnabled = !this.sfxEnabled;
     localStorage.setItem('caces_sfx', this.sfxEnabled ? 'on' : 'off');
     if (!this.sfxEnabled) {
+      this.isSpeakingNow = false;
       try {
         if (window.speechSynthesis) window.speechSynthesis.cancel();
       } catch (e) {}
@@ -855,6 +838,7 @@ export class ArcadeManager {
 
   stopAllLoops() {
     this.setExternalPageChromeHidden(false);
+    this.isSpeakingNow = false;
     if (this.blitzInterval) {
       clearInterval(this.blitzInterval);
       this.blitzInterval = null;
@@ -918,7 +902,7 @@ export class ArcadeManager {
     const modes = [
       {
         id: 'bridge',
-        badge: '○ △ □ • POV 3D SQUID GAME',
+        badge: '○ △ □ • POV 3D REALISTA 360°',
         badgeClass: 'bg-rose-500/15 text-rose-500 border border-rose-500/30',
         activeBorder: 'border-2 border-rose-500 ring-2 ring-rose-500/20',
         imgSrc: 'assets/juego-puente-cristal.png',
@@ -926,7 +910,7 @@ export class ArcadeManager {
         imgClass: 'w-full h-full object-cover',
         title: '1. El Puente de Cristal (#456)',
         shortTitle: 'Puente de Cristal',
-        desc: 'Pantalla completa inmersiva en POV primera persona con los 3 jugadores (#456, #058, #100).',
+        desc: 'Cámara POV 360° con techo, abismo, guardianes ○△□, sombras reales y rostros 3D.',
         statsLabel: `Racha Máx: ${Math.max(arcStats.bridgeBestStreak || 0, arcStats.bridgeBestStep || 0)} • Puentes: ${arcStats.bridgeWins || 0}`
       },
       {
@@ -991,7 +975,7 @@ export class ArcadeManager {
   }
 
   // =========================================================================
-  // JUEGO 1: EL PUENTE DE CRISTAL 3D (POV REAL SOBRE EL PELDAÑO + RELEVO SUAVE)
+  // JUEGO 1: EL PUENTE DE CRISTAL 3D (REALISTA + CÁMARA 360° + SOMBRAS DIRECCIONALES + GUARDIANES)
   // =========================================================================
   getGlassBridgeQuestions(count = 12) {
     const fallbackQuestions = [
@@ -1228,7 +1212,7 @@ export class ArcadeManager {
       lastJumpOutcome: null,
       lastChosenOptionId: null,
       lastFallenPlayerNum: null,
-      spokenSteps: new Set(), // Garantiza máximo 1 diálogo automático por peldaño
+      spokenSteps: new Set(),
       isGameOver: false,
       isVictory: false,
       isFullscreenOpen: true,
@@ -1238,55 +1222,60 @@ export class ArcadeManager {
         temperedShield: carryOver ? Math.max(1, carryOver.powerups?.temperedShield || 0) : 1
       },
       anim: {
-        // Secuencia de Cámara:
-        // 'INTRO_SQUAD'          -> Plano inicial mostrando a los 3 jugadores (#456, #058, #100)
-        // 'POV_READY'            -> Primera Persona (POV) del jugador que va a saltar
-        // 'POV_JUMPING'          -> Saltando y cayendo JUSTO EN EL PELDAÑO mientras mira hacia sus pies
-        // 'POV_FLOOR_CHECK_SAFE' -> Mirando sus zapatillas sobre el vidrio templado y luego levantando la mirada al frente
-        // 'POV_FLOOR_CRACK'      -> Mirando sus zapatillas sobre el vidrio agrietándose antes de romperse
-        // 'POV_FALLING'          -> Cayendo al vacío en primera persona
-        // 'RELAY_REVEAL_BEHIND'  -> Transición cinemática que muestra al jugador que estaba atrás (#058 o #100) y hace zoom hacia sus ojos
-        // 'POV_RELAY_JUMP'       -> El jugador de atrás salta en su POV y cae justo sobre el vidrio templado seguro
         camMode: 'INTRO_SQUAD',
         introStartTime: now,
-        introDuration: 2050,
+        introDuration: 2250,
 
-        // Posición real 3D de los ojos de la cámara (con rotación Pitch real para que al caer en row=r estés ENCIMA del peldaño r)
-        cameraRow: -2.25,
+        // Posición 3D de la cámara con soporte de rotación libre de 360° (Yaw + Pitch)
+        // Al empezar en Peldaño 1, el jugador #456 está parado en la Plataforma de Salida (row = -1.18)
+        // detrás de la franja de peligro amarilla/negra para que se vea claramente que está por iniciar el puente.
+        cameraRow: -2.85,
         cameraLane: 1.5,
-        cameraY: 1.48,
-        cameraPitch: 0.14, // En radianes: 0.16 rad (~9°) mira al frente; 1.05 rad (~60°) mira directo a tus pies sobre el vidrio
+        cameraY: 1.62,
+        cameraPitch: 0.12,
+        cameraYaw: 0,
         cameraRoll: 0,
 
-        // Posición lógica del jugador activo en POV (en el borde de salida -0.82 antes del peldaño 0, y exactamente en r al pisar el peldaño r)
+        // Rotación libre controlada por el usuario (arrastrando la pantalla o con el botón Mirar Atrás)
+        userYaw: 0,
+        targetUserYaw: 0,
+        userPitch: 0,
+        targetUserPitch: 0,
+        isDraggingLook: false,
+        dragMoved: false,
+        dragStartX: 0,
+        dragStartY: 0,
+        dragBaseYaw: 0,
+        dragBasePitch: 0,
+
+        // Posición lógica del jugador activo en POV
         playerNumber: leadNum,
-        playerRow: -0.82,
+        playerRow: -1.18,
         playerLane: 1.5,
 
         // Interpolación de salto en POV
         jumpStartTime: 0,
-        jumpDuration: 580,
-        jumpStartRow: -0.82,
+        jumpDuration: 600,
+        jumpStartRow: -1.18,
         jumpStartLane: 1.5,
         jumpTargetRow: 0,
         jumpTargetLane: 1.5,
         jumpWillBreak: false,
         jumpChosenId: null,
 
-        // Tiempos de sub-fases cinemáticas
         phaseStartTime: now,
-        phaseDuration: 2050,
+        phaseDuration: 2250,
 
         cracks: [],
         sparks: [],
         shards: [],
         shockwaves: [],
         marbleAnim: null,
-        dustMotes: Array.from({ length: 26 }, () => ({
-          x: (Math.random() - 0.5) * 7,
-          y: -1.6 + Math.random() * 4.0,
-          z: -1 + Math.random() * 14,
-          r: 0.8 + Math.random() * 1.7,
+        dustMotes: Array.from({ length: 34 }, () => ({
+          x: (Math.random() - 0.5) * 9,
+          y: -4.0 + Math.random() * 8.5,
+          z: -2 + Math.random() * 16,
+          r: 0.9 + Math.random() * 1.9,
           speed: 0.002 + Math.random() * 0.004,
           phase: Math.random() * Math.PI * 2
         })),
@@ -1301,7 +1290,7 @@ export class ArcadeManager {
     this.renderGlassBridgeLayout();
     this.startGlassBridgeRenderLoop();
     this.startAmbientSound('bridge');
-    this.scheduleSingleStepDialogue(2250);
+    this.scheduleSingleStepDialogue(2450);
   }
 
   continueBridgeStreakRound() {
@@ -1317,8 +1306,41 @@ export class ArcadeManager {
   }
 
   /**
-   * Programa como máximo 1 diálogo para el peldaño actual (nunca se repite cada 2 segundos).
+   * Alterna entre mirar hacia atrás (180° para ver a #058 y #100 con sus caras 3D) y mirar hacia adelante (0°)
    */
+  toggleLookBehindCamera() {
+    const st = this.bridgeState;
+    if (!st || !st.anim) return;
+    const anim = st.anim;
+    if (anim.camMode === 'INTRO_SQUAD') {
+      anim.camMode = 'POV_READY';
+    }
+    const isLookingBack = Math.abs(anim.targetUserYaw) > 1.5;
+    if (isLookingBack) {
+      anim.targetUserYaw = 0;
+      anim.targetUserPitch = 0;
+    } else {
+      anim.targetUserYaw = Math.PI;
+      anim.targetUserPitch = 0.06;
+    }
+    this.playTone('click');
+    this.updateLookBehindButtonUI();
+  }
+
+  updateLookBehindButtonUI() {
+    const btn = document.getElementById('btn-bridge-look-behind');
+    const st = this.bridgeState;
+    if (!btn || !st || !st.anim) return;
+    const isLookingBack = Math.abs(st.anim.targetUserYaw) > 1.5;
+    if (isLookingBack) {
+      btn.className = 'pointer-events-auto px-2.5 py-1 rounded-xl bg-emerald-500 text-slate-950 border border-emerald-300 font-mono text-[10px] sm:text-xs font-black shadow-lg cursor-pointer active:scale-95 flex items-center gap-1';
+      btn.innerHTML = '<span>🎯 Mirar al Frente</span>';
+    } else {
+      btn.className = 'pointer-events-auto px-2.5 py-1 rounded-xl bg-slate-950/90 hover:bg-slate-900 text-amber-300 border border-amber-400/60 font-mono text-[10px] sm:text-xs font-extrabold shadow-lg cursor-pointer active:scale-95 flex items-center gap-1';
+      btn.innerHTML = st.lives > 1 ? '<span>👀 Voltear a ver Atrás (#058/#100)</span>' : '<span>👀 Voltear Cámara (180°)</span>';
+    }
+  }
+
   scheduleSingleStepDialogue(delayMs = 950) {
     if (this.chatterTimeout) {
       clearTimeout(this.chatterTimeout);
@@ -1334,11 +1356,9 @@ export class ArcadeManager {
     }, delayMs);
   }
 
-  /**
-   * Sintetiza la voz hablada en español (Web Speech API) + toque acústico suave.
-   */
   speakBackPlayerLine(speakerNum, text, isInnerPOV = false) {
     if (!this.sfxEnabled || !text) return;
+    this.isSpeakingNow = true;
 
     try {
       if (!this.audioCtx) {
@@ -1396,17 +1416,18 @@ export class ArcadeManager {
           utter.rate = 1.09;
         }
         utter.volume = 0.95;
+        utter.onend = () => { this.isSpeakingNow = false; };
+        utter.onerror = () => { this.isSpeakingNow = false; };
         window.speechSynthesis.speak(utter);
+        setTimeout(() => { this.isSpeakingNow = false; }, 4200);
+      } else {
+        setTimeout(() => { this.isSpeakingNow = false; }, 3200);
       }
-    } catch (e) {}
+    } catch (e) {
+      this.isSpeakingNow = false;
+    }
   }
 
-  /**
-   * Genera como máximo 1 vez por peldaño el diálogo:
-   * - Si quedan 2 o 3 vidas: hablan los jugadores de atrás (#058 o #100) con frases de la ULEAM, la rural,
-   *   primer semestre, tirar la canica, comodín 50/50 o trampas.
-   * - Si queda 1 sola vida (#100): es monólogo interno en tu propio POV (sin gritos de "salta ya" desde atrás).
-   */
   triggerBackPlayerTaunt(reason = 'step_once') {
     const st = this.bridgeState;
     if (!st || !st.isFullscreenOpen || st.isGameOver || st.isVictory) return;
@@ -1460,7 +1481,6 @@ export class ArcadeManager {
         ];
       }
     } else if (isLastLifePOV) {
-      // Diálogos 100% en primera persona (POV) cuando queda la última vida (#100 solo en el puente)
       pool = [
         {
           tag: '💭 MI POV • CÁBALA ULEAM',
@@ -1494,7 +1514,6 @@ export class ArcadeManager {
         }
       ];
     } else {
-      // Diálogos de los compañeros de atrás (#058 y #100) cuando tienes 2 o 3 vidas
       pool = [
         {
           tag: '🎓 CÁBALA DE LA ULEAM',
@@ -1585,9 +1604,6 @@ export class ArcadeManager {
     }, 6200);
   }
 
-  /**
-   * Renderiza el mensaje en pantalla de lo que dicen los jugadores de atrás (o tu pensamiento POV en la última vida)
-   */
   renderBackPlayerChatterBanner() {
     const wrap = document.getElementById('bridge-back-player-chatter-wrap');
     const st = this.bridgeState;
@@ -1715,11 +1731,11 @@ export class ArcadeManager {
 
     portal.className = 'fixed inset-0 z-[9999] w-screen h-[100dvh] bg-[#08020f] flex flex-col justify-between overflow-hidden select-none';
     portal.innerHTML = `
-      <!-- MITAD SUPERIOR: VISOR 3D EN PRIMERA PERSONA (CON CAÍDA EXACTA EN EL PELDAÑO Y MIRADA A LOS PIES) -->
-      <div id="bridge-3d-canvas-wrap" class="relative w-full h-[38dvh] min-h-[195px] max-h-[390px] sm:h-[44dvh] shrink-0 overflow-hidden bg-[#08020f]">
-        <canvas id="squid-bridge-canvas" class="w-full h-full block cursor-pointer" width="840" height="440"></canvas>
+      <!-- MITAD SUPERIOR: VISOR 3D REALISTA GRAN ANGULAR CON CÁMARA LIBRE 360° -->
+      <div id="bridge-3d-canvas-wrap" class="relative w-full h-[40dvh] min-h-[205px] max-h-[410px] sm:h-[45dvh] shrink-0 overflow-hidden bg-[#06020c] touch-none">
+        <canvas id="squid-bridge-canvas" class="w-full h-full block cursor-grab active:cursor-grabbing" width="880" height="460"></canvas>
 
-        <!-- Barra Flotante Mínima dentro del Visor 3D -->
+        <!-- Barra Superior dentro del Visor 3D -->
         <div class="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between gap-1.5 z-10 pointer-events-none">
           <div class="flex flex-wrap items-center gap-1.5 pointer-events-auto">
             <div class="px-2.5 py-1 rounded-full bg-slate-950/90 border border-rose-500/50 text-white font-mono text-[10px] sm:text-xs font-bold flex items-center gap-1.5 backdrop-blur-md shadow-lg">
@@ -1731,12 +1747,9 @@ export class ArcadeManager {
             <span id="bridge-3d-step-pill" class="px-2.5 py-1 rounded-full bg-slate-950/90 border border-emerald-500/50 text-emerald-300 font-mono text-[10px] sm:text-xs font-black backdrop-blur-md shadow-md">
               PELDAÑO 1/12
             </span>
-            <span id="bridge-3d-bpm-pill" class="px-2.5 py-1 rounded-full bg-slate-950/90 border border-rose-500/55 text-rose-300 font-mono text-[10px] sm:text-xs font-black backdrop-blur-md shadow-md inline-flex items-center gap-1" title="Frecuencia cardíaca en vivo">
+            <span id="bridge-3d-bpm-pill" class="px-2.5 py-1 rounded-full bg-slate-950/90 border border-rose-500/55 text-rose-300 font-mono text-[10px] sm:text-xs font-black backdrop-blur-md shadow-md inline-flex items-center gap-1">
               <span id="bridge-3d-bpm-heart" class="inline-block text-rose-500 transition-transform duration-150">❤️</span>
               <span class="bpm-val">72 BPM</span>
-            </span>
-            <span id="bridge-3d-streak-pill" class="hidden sm:inline-flex px-2.5 py-1 rounded-full bg-slate-950/90 border border-amber-500/45 text-amber-300 font-mono text-[10px] sm:text-xs font-bold backdrop-blur-md shadow-md">
-              RACHA: 0
             </span>
           </div>
 
@@ -1753,11 +1766,14 @@ export class ArcadeManager {
         <!-- Globo de Diálogo (Máximo 1 vez por peldaño) -->
         <div id="bridge-back-player-chatter-wrap" class="absolute top-12 left-2.5 right-2.5 z-20 pointer-events-none"></div>
 
-        <!-- Indicador Cinemático Inferior dentro del Visor 3D -->
-        <div class="absolute bottom-2 left-3 right-3 flex items-center justify-between pointer-events-none z-10">
-          <span id="bridge-pov-camera-badge" class="px-2.5 py-0.5 rounded-lg bg-slate-950/85 border border-cyan-500/45 text-cyan-300 font-mono text-[10px] font-bold backdrop-blur-sm shadow">
-            🎬 PRESENTANDO ESCUADRÓN: #456 • #058 • #100
+        <!-- Barra Inferior del Visor 3D: Estado POV + Botón para Voltear 180° a ver a los Jugadores de Atrás -->
+        <div class="absolute bottom-2 left-2.5 right-2.5 flex items-center justify-between gap-2 pointer-events-none z-10">
+          <span id="bridge-pov-camera-badge" class="px-2.5 py-1 rounded-xl bg-slate-950/88 border border-cyan-500/45 text-cyan-300 font-mono text-[9px] sm:text-[10px] font-bold backdrop-blur-sm shadow truncate">
+            🖐️ Arrastra para mirar 360° (Techo, Abismo, Guardianes y Atrás)
           </span>
+          <button type="button" id="btn-bridge-look-behind" class="pointer-events-auto px-2.5 py-1 rounded-xl bg-slate-950/90 hover:bg-slate-900 text-amber-300 border border-amber-400/60 font-mono text-[10px] sm:text-xs font-extrabold shadow-lg cursor-pointer active:scale-95 flex items-center gap-1 shrink-0">
+            <span>👀 Voltear a ver Atrás (#058/#100)</span>
+          </button>
         </div>
       </div>
 
@@ -1778,10 +1794,19 @@ export class ArcadeManager {
       this.exitBridgeFullscreen();
     });
 
+    portal.querySelector('#btn-bridge-look-behind')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.toggleLookBehindCamera();
+    });
+
     this.bindBridgeCanvasEvents();
     this.updateGlassBridgeDOM();
   }
 
+  /**
+   * Vincula el control interactivo 360° (arrastrar con el dedo o con el mouse sobre el visor 3D)
+   * para mirar el techo, las luces, el abismo, los guardianes en la meta o voltear 180° a ver a los jugadores de atrás.
+   */
   bindBridgeCanvasEvents() {
     const canvas = document.getElementById('squid-bridge-canvas');
     if (!canvas) return;
@@ -1792,6 +1817,8 @@ export class ArcadeManager {
       const clientX = touch ? touch.clientX : evt.clientX;
       const clientY = touch ? touch.clientY : evt.clientY;
       return {
+        clientX,
+        clientY,
         x: (clientX - rect.left) * (canvas.width / rect.width),
         y: (clientY - rect.top) * (canvas.height / rect.height)
       };
@@ -1808,43 +1835,69 @@ export class ArcadeManager {
       return inside;
     };
 
-    canvas.addEventListener('mousemove', (e) => {
-      if (!this.bridgeState) return;
-      const pos = getCanvasPos(e);
-      let foundLane = -1;
-      const regions = this.bridgeState.anim.tileHitRegions || [];
-      for (const reg of regions) {
-        if (pointInPoly(pos.x, pos.y, reg.poly)) {
-          foundLane = reg.lane;
-          break;
-        }
-      }
-      this.bridgeState.anim.hoveredLane = foundLane;
-    });
-
-    canvas.addEventListener('mouseleave', () => {
-      if (this.bridgeState) this.bridgeState.anim.hoveredLane = -1;
-    });
-
-    canvas.addEventListener('click', (e) => {
+    const startDrag = (evt) => {
       if (!this.bridgeState) return;
       const st = this.bridgeState;
       if (st.anim.camMode === 'INTRO_SQUAD') {
         st.anim.camMode = 'POV_READY';
         st.anim.cameraRow = st.anim.playerRow;
         st.anim.cameraLane = st.anim.playerLane;
-        st.anim.cameraY = 1.18;
-        st.anim.cameraPitch = 0.18;
-        this.updateGlassBridgeDOM();
+        st.anim.cameraY = 1.24;
+        st.anim.cameraPitch = 0.16;
+      }
+      const pos = getCanvasPos(evt);
+      st.anim.isDraggingLook = true;
+      st.anim.dragMoved = false;
+      st.anim.dragStartX = pos.clientX;
+      st.anim.dragStartY = pos.clientY;
+      st.anim.dragBaseYaw = st.anim.targetUserYaw;
+      st.anim.dragBasePitch = st.anim.targetUserPitch;
+    };
+
+    const moveDrag = (evt) => {
+      if (!this.bridgeState) return;
+      const st = this.bridgeState;
+      const pos = getCanvasPos(evt);
+
+      if (st.anim.isDraggingLook) {
+        const dx = pos.clientX - st.anim.dragStartX;
+        const dy = pos.clientY - st.anim.dragStartY;
+        if (Math.hypot(dx, dy) > 6) {
+          st.anim.dragMoved = true;
+        }
+        // Rotación libre de 360° en horizontal (Yaw) y de -50° a +55° en vertical (Pitch)
+        st.anim.targetUserYaw = st.anim.dragBaseYaw - dx * 0.0085;
+        st.anim.targetUserPitch = Math.max(-0.78, Math.min(0.82, st.anim.dragBasePitch + dy * 0.0065));
+        this.updateLookBehindButtonUI();
         return;
       }
+
+      let foundLane = -1;
+      const regions = st.anim.tileHitRegions || [];
+      for (const reg of regions) {
+        if (pointInPoly(pos.x, pos.y, reg.poly)) {
+          foundLane = reg.lane;
+          break;
+        }
+      }
+      st.anim.hoveredLane = foundLane;
+    };
+
+    const endDrag = (evt) => {
+      if (!this.bridgeState) return;
+      const st = this.bridgeState;
+      const wasMoved = st.anim.dragMoved;
+      st.anim.isDraggingLook = false;
+
+      if (wasMoved) return;
+
       if (st.awaitingNextStep && !st.isAnimatingJump && !st.isGameOver && !st.isVictory) {
         this.advanceBridgeStep();
         return;
       }
       if (st.isAnimatingJump || st.awaitingNextStep || st.isGameOver || st.isVictory) return;
 
-      const pos = getCanvasPos(e);
+      const pos = getCanvasPos(evt);
       const regions = st.anim.tileHitRegions || [];
       for (const reg of regions) {
         if (pointInPoly(pos.x, pos.y, reg.poly)) {
@@ -1855,12 +1908,17 @@ export class ArcadeManager {
           break;
         }
       }
-    });
+    };
+
+    canvas.addEventListener('mousedown', startDrag);
+    window.addEventListener('mousemove', moveDrag);
+    window.addEventListener('mouseup', endDrag);
+
+    canvas.addEventListener('touchstart', startDrag, { passive: true });
+    canvas.addEventListener('touchmove', moveDrag, { passive: true });
+    canvas.addEventListener('touchend', endDrag, { passive: true });
   }
 
-  /**
-   * Comodín del 50/50 (Ojo del Vidriero): Rompe 2 vidrios falsos dejando solo 2 opciones
-   */
   triggerGlassmakerEyePowerup() {
     const st = this.bridgeState;
     if (!st || st.powerups.glassmakerEye <= 0 || st.awaitingNextStep || st.isAnimatingJump || st.brokenOptionsInCurrentStep.size >= 2) return;
@@ -1871,7 +1929,7 @@ export class ArcadeManager {
       st.brokenOptionsInCurrentStep.add(id);
       const lIdx = this.laneIndexForOption(id);
       st.tiles[st.currentStep][lIdx] = 'broken';
-      this.spawnGlassShards3D(st.currentStep, lIdx, 32);
+      this.spawnGlassShards3D(st.currentStep, lIdx, 36);
     });
     st.anim.screenShake = 10;
     st.powerups.glassmakerEye -= 1;
@@ -1879,9 +1937,6 @@ export class ArcadeManager {
     this.updateGlassBridgeDOM();
   }
 
-  /**
-   * Tirar la Canica: Lanza una canica al peldaño actual para escuchar y ver una pista clínica
-   */
   triggerMarbleHintPowerup() {
     const st = this.bridgeState;
     if (!st || st.powerups.marbleHint <= 0 || st.hintRevealedInCurrentStep || st.awaitingNextStep || st.isAnimatingJump) return;
@@ -1891,7 +1946,7 @@ export class ArcadeManager {
     st.powerups.marbleHint -= 1;
     st.anim.marbleAnim = {
       startTime: performance.now(),
-      duration: 650,
+      duration: 680,
       startRow: st.anim.playerRow,
       startLane: st.anim.playerLane,
       targetRow: st.currentStep,
@@ -1901,9 +1956,6 @@ export class ArcadeManager {
     this.updateGlassBridgeDOM();
   }
 
-  /**
-   * Escudo Templado: Protege de 1 caída si eliges un cristal falso
-   */
   triggerTemperedShieldPowerup() {
     const st = this.bridgeState;
     if (!st || st.powerups.temperedShield <= 0 || st.shieldActiveInCurrentStep || st.awaitingNextStep || st.isAnimatingJump) return;
@@ -1920,7 +1972,6 @@ export class ArcadeManager {
     const bottomOverlay = document.getElementById('bridge-bottom-hud-overlay');
     const popupEl = document.getElementById('bridge-question-popup');
     const stepPill = document.getElementById('bridge-3d-step-pill');
-    const streakPill = document.getElementById('bridge-3d-streak-pill');
     const hearts3DWrap = document.getElementById('bridge-3d-hearts-wrap');
     const squad3DWrap = document.getElementById('bridge-3d-squad-wrap');
     const povBadge = document.getElementById('bridge-pov-camera-badge');
@@ -1934,15 +1985,13 @@ export class ArcadeManager {
         ? `★ NIVEL ${st.bridgeLevel} LOGRADO`
         : `PELDAÑO ${globalStepNum}/${globalGoalNum}`;
     }
-    if (streakPill) {
-      streakPill.textContent = `RACHA: ${st.streak}`;
-    }
     const bpmPill = document.getElementById('bridge-3d-bpm-pill');
     if (bpmPill) {
       const bpmVal = bpmPill.querySelector('.bpm-val');
       if (bpmVal) bpmVal.textContent = `${this.getBridgeCurrentBPM()} BPM`;
     }
     this.renderBackPlayerChatterBanner();
+    this.updateLookBehindButtonUI();
 
     if (hearts3DWrap) {
       hearts3DWrap.innerHTML = this.renderLivesHearts(st.lives, 3);
@@ -1953,41 +2002,40 @@ export class ArcadeManager {
     if (povBadge) {
       const mode = st.anim.camMode;
       if (mode === 'INTRO_SQUAD') {
-        povBadge.className = 'px-2.5 py-0.5 rounded-lg bg-emerald-950/90 border border-emerald-400/60 text-emerald-300 font-mono text-[10px] font-black backdrop-blur-sm shadow';
-        povBadge.textContent = '🎬 PLANO INICIAL: 3 JUGADORES (#456 • #058 • #100)';
+        povBadge.className = 'px-2.5 py-1 rounded-xl bg-emerald-950/90 border border-emerald-400/60 text-emerald-300 font-mono text-[9px] sm:text-[10px] font-black backdrop-blur-sm shadow truncate';
+        povBadge.textContent = '🎬 PLATAFORMA DE SALIDA: #456 • #058 • #100';
       } else if (mode === 'POV_JUMPING') {
-        povBadge.className = 'px-2.5 py-0.5 rounded-lg bg-cyan-950/90 border border-cyan-400 text-cyan-200 font-mono text-[10px] font-black backdrop-blur-sm shadow';
-        povBadge.textContent = `👁️ POV #${st.anim.playerNumber} • SALTANDO AL PELDAÑO Y MIRANDO A LOS PIES...`;
+        povBadge.className = 'px-2.5 py-1 rounded-xl bg-cyan-950/90 border border-cyan-400 text-cyan-200 font-mono text-[9px] sm:text-[10px] font-black backdrop-blur-sm shadow truncate';
+        povBadge.textContent = `👁️ POV #${st.anim.playerNumber} • CAYENDO EN EL PELDAÑO Y MIRANDO A LOS PIES...`;
       } else if (mode === 'POV_FLOOR_CHECK_SAFE') {
-        povBadge.className = 'px-2.5 py-0.5 rounded-lg bg-emerald-950/95 border border-emerald-400 text-emerald-200 font-mono text-[10px] font-black backdrop-blur-sm shadow';
+        povBadge.className = 'px-2.5 py-1 rounded-xl bg-emerald-950/95 border border-emerald-400 text-emerald-200 font-mono text-[9px] sm:text-[10px] font-black backdrop-blur-sm shadow truncate';
         povBadge.textContent = `✓ POV #${st.anim.playerNumber} • ¡VIDRIO TEMPLADO BAJO TUS PIES! MIRANDO AL FRENTE...`;
       } else if (mode === 'POV_FLOOR_CRACK') {
-        povBadge.className = 'px-2.5 py-0.5 rounded-lg bg-rose-950/95 border border-rose-400 text-rose-200 font-mono text-[10px] font-black backdrop-blur-sm shadow';
-        povBadge.textContent = `⚠️ POV #${st.anim.playerNumber} • ¡EL CRISTAL BAJO TUS PIES SE ESTÁ ROMPIENDO!`;
+        povBadge.className = 'px-2.5 py-1 rounded-xl bg-rose-950/95 border border-rose-400 text-rose-200 font-mono text-[9px] sm:text-[10px] font-black backdrop-blur-sm shadow truncate';
+        povBadge.textContent = `⚠️ POV #${st.anim.playerNumber} • ¡EL CRISTAL BAJO TUS ZAPATILLAS SE ROMPE!`;
       } else if (mode === 'POV_FALLING') {
-        povBadge.className = 'px-2.5 py-0.5 rounded-lg bg-rose-600/95 border border-rose-200 text-white font-mono text-[10px] font-black animate-bounce shadow-lg';
-        povBadge.textContent = `✕ ¡EL VIDRIO SE ROMPIÓ! CAÍDA EN POV DE #${st.lastFallenPlayerNum || st.anim.playerNumber}`;
+        povBadge.className = 'px-2.5 py-1 rounded-xl bg-rose-600/95 border border-rose-200 text-white font-mono text-[9px] sm:text-[10px] font-black animate-bounce shadow-lg truncate';
+        povBadge.textContent = `✕ ¡CAÍDA AL ABISMO DE #${st.lastFallenPlayerNum || st.anim.playerNumber}!`;
       } else if (mode === 'RELAY_REVEAL_BEHIND') {
-        povBadge.className = 'px-2.5 py-0.5 rounded-lg bg-amber-400 text-slate-950 font-mono text-[10px] font-black shadow-lg';
-        povBadge.textContent = `🎬 EL JUGADOR DE ATRÁS (#${st.anim.playerNumber}) TOMA EL RELEVO → ENTRANDO A SU POV...`;
+        povBadge.className = 'px-2.5 py-1 rounded-xl bg-amber-400 text-slate-950 font-mono text-[9px] sm:text-[10px] font-black shadow-lg truncate';
+        povBadge.textContent = `🎬 RELEVO: EL JUGADOR DE ATRÁS (#${st.anim.playerNumber}) AVANZA → ENTRANDO A SU POV`;
       } else if (mode === 'POV_RELAY_JUMP') {
-        povBadge.className = 'px-2.5 py-0.5 rounded-lg bg-emerald-400 text-slate-950 font-mono text-[10px] font-black shadow-lg';
+        povBadge.className = 'px-2.5 py-1 rounded-xl bg-emerald-400 text-slate-950 font-mono text-[9px] sm:text-[10px] font-black shadow-lg truncate';
         povBadge.textContent = `👁️ POV #${st.anim.playerNumber} • SALTANDO AL VIDRIO TEMPLADO SEGURO`;
       } else {
-        povBadge.className = 'px-2.5 py-0.5 rounded-lg bg-slate-950/85 border border-emerald-500/50 text-emerald-300 font-mono text-[10px] font-bold backdrop-blur-sm shadow';
-        povBadge.textContent = `👁️ TU POV: JUGADOR #${st.anim.playerNumber} (${st.lives} ${st.lives === 1 ? 'VIDA • ÚLTIMO EN PIE' : 'VIDAS'})`;
+        povBadge.className = 'px-2.5 py-1 rounded-xl bg-slate-950/88 border border-emerald-500/50 text-emerald-300 font-mono text-[9px] sm:text-[10px] font-bold backdrop-blur-sm shadow truncate';
+        povBadge.textContent = `👁️ POV #${st.anim.playerNumber} • Arrastra el visor 3D para mirar alrededor o atrás`;
       }
     }
 
     if (canvasWrap) {
       if (st.awaitingNextStep) {
-        canvasWrap.className = 'relative w-full h-[30dvh] min-h-[160px] max-h-[280px] sm:h-[35dvh] shrink-0 overflow-hidden bg-[#08020f] transition-all duration-200';
+        canvasWrap.className = 'relative w-full h-[32dvh] min-h-[175px] max-h-[300px] sm:h-[36dvh] shrink-0 overflow-hidden bg-[#06020c] transition-all duration-200 touch-none';
       } else {
-        canvasWrap.className = 'relative w-full h-[38dvh] min-h-[195px] max-h-[390px] sm:h-[44dvh] shrink-0 overflow-hidden bg-[#08020f] transition-all duration-200';
+        canvasWrap.className = 'relative w-full h-[40dvh] min-h-[205px] max-h-[410px] sm:h-[45dvh] shrink-0 overflow-hidden bg-[#06020c] transition-all duration-200 touch-none';
       }
     }
 
-    // Si terminó la partida (Victoria o Game Over), mostrar modal final
     if (st.isGameOver || st.isVictory) {
       if (popupEl) {
         popupEl.classList.remove('hidden');
@@ -2000,10 +2048,10 @@ export class ArcadeManager {
             </div>
             <div class="space-y-1.5">
               <span class="px-3 py-1 rounded-full font-mono text-xs font-black uppercase ${st.isVictory ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'}">
-                ${st.isVictory ? `★ PUENTE NIVEL ${st.bridgeLevel} COMPLETADO` : '✕ LOS 3 JUGADORES CAYERON AL VACÍO'}
+                ${st.isVictory ? `★ PUENTE NIVEL ${st.bridgeLevel} COMPLETADO` : '✕ LOS 3 JUGADORES CAYERON AL ABISMO'}
               </span>
               <h3 class="font-display font-black text-2xl sm:text-3xl text-white">
-                ${st.isVictory ? '¡Sobreviviste rumbo a la Rural!' : '¡Fin de la Partida en el Puente!'}
+                ${st.isVictory ? '¡Llegaste a la Meta con los Guardianes!' : '¡Fin de la Partida en el Puente!'}
               </h3>
               <p class="text-xs sm:text-sm text-slate-300 leading-relaxed">
                 ${st.isVictory
@@ -2039,7 +2087,6 @@ export class ArcadeManager {
     const q = st.questions[Math.min(st.currentStep, st.totalSteps - 1)];
     const options = Array.isArray(q.opciones) ? q.opciones : [];
 
-    // MODO RETROALIMENTACIÓN: Cuando ya aterrizó en el vidrio templado y levantó la mirada al frente
     if (st.awaitingNextStep) {
       const isCorrect = st.lastJumpOutcome === 'correct';
       const pctMap = this.getOptionSelectionPercentages(q, st.currentStep);
@@ -2057,16 +2104,15 @@ export class ArcadeManager {
                   <h4 class="font-display font-black text-xs sm:text-sm ${isCorrect ? 'text-emerald-300' : 'text-rose-300'} uppercase">
                     ${isCorrect
                       ? `¡Vidrio Templado Firme! Jugador #${st.anim.playerNumber} sobre el peldaño ${globalStepNum}`
-                      : `¡#${st.lastFallenPlayerNum} cayó al vacío! Jugador de atrás (#${st.anim.playerNumber}) tomó el relevo en el vidrio ${q.correcta}`}
+                      : `¡#${st.lastFallenPlayerNum} cayó al abismo! Jugador de atrás (#${st.anim.playerNumber}) tomó el relevo en el vidrio ${q.correcta}`}
                   </h4>
                 </div>
               </div>
               <button type="button" id="btn-bridge-next-step" class="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 font-display font-black text-xs uppercase tracking-wider shadow-lg cursor-pointer shrink-0">
-                ${isLastStep ? '🏆 Cruzar a la Meta VIP →' : 'Siguiente Peldaño →'}
+                ${isLastStep ? '🏆 Cruzar a la Meta con los Guardianes →' : 'Siguiente Peldaño →'}
               </button>
             </div>
 
-            <!-- Opciones resumidas con porcentajes estilo simulador -->
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
               ${options.map(opt => {
                 const isKey = opt.id === q.correcta;
@@ -2087,7 +2133,6 @@ export class ArcadeManager {
               }).join('')}
             </div>
 
-            <!-- Perla CACES sin barra de desplazamiento -->
             <div class="p-2.5 sm:p-3 rounded-xl bg-amber-500/10 border border-amber-500/40 flex items-start gap-2">
               <span class="text-amber-400 shrink-0 mt-0.5">${SVG_ICONS.sparkle}</span>
               <div class="text-xs text-amber-100 leading-snug">
@@ -2105,14 +2150,12 @@ export class ArcadeManager {
       return;
     }
 
-    // MODO PREGUNTA ACTIVA + BARRA DE COMODINES (50/50, TIRAR LA CANICA, ESCUDO TEMPLADO) + 4 OPCIONES
     const can5050 = st.powerups.glassmakerEye > 0 && st.brokenOptionsInCurrentStep.size < 2 && !st.isAnimatingJump;
     const canMarble = st.powerups.marbleHint > 0 && !st.hintRevealedInCurrentStep && !st.isAnimatingJump;
     const canShield = st.powerups.temperedShield > 0 && !st.shieldActiveInCurrentStep && !st.isAnimatingJump;
 
     bottomOverlay.innerHTML = `
       <div class="space-y-2 my-auto">
-        <!-- Cabecera de la pregunta + Comodines interactivos -->
         <div class="p-2.5 sm:p-3.5 rounded-2xl bg-slate-900/95 border border-slate-800 shadow-inner space-y-1.5">
           <div class="flex flex-wrap items-center justify-between gap-1.5">
             <div class="flex items-center gap-1.5">
@@ -2124,7 +2167,6 @@ export class ArcadeManager {
               </span>
             </div>
 
-            <!-- Botones de Comodines (50/50, Tirar Canica, Escudo Templado) -->
             <div class="flex flex-wrap items-center gap-1.5">
               <button type="button" id="btn-power-5050" ${can5050 ? '' : 'disabled'} class="px-2.5 py-1 rounded-lg border font-mono text-[10px] font-extrabold transition-all flex items-center gap-1 ${
                 can5050
@@ -2138,7 +2180,7 @@ export class ArcadeManager {
                 canMarble
                   ? 'bg-cyan-500/20 hover:bg-cyan-500/35 border-cyan-400/60 text-cyan-200 cursor-pointer active:scale-95'
                   : 'bg-slate-900 border-slate-800 text-slate-600 opacity-50 cursor-not-allowed'
-              }" title="Tirar la canica para probar el cristal y ver pista">
+              }" title="Tirar la canica para probar el cristal">
                 <span>🔮 Tirar Canica (${st.powerups.marbleHint})</span>
               </button>
 
@@ -2148,7 +2190,7 @@ export class ArcadeManager {
                   : canShield
                   ? 'bg-emerald-500/20 hover:bg-emerald-500/35 border-emerald-400/60 text-emerald-200 cursor-pointer active:scale-95'
                   : 'bg-slate-900 border-slate-800 text-slate-600 opacity-50 cursor-not-allowed'
-              }" title="Escudo Templado: Evita perder la vida si el vidrio se rompe">
+              }" title="Escudo Templado">
                 <span>🛡️ ${st.shieldActiveInCurrentStep ? 'Escudo Activo' : `Escudo (${st.powerups.temperedShield})`}</span>
               </button>
             </div>
@@ -2162,12 +2204,11 @@ export class ArcadeManager {
           ${st.hintRevealedInCurrentStep ? `
             <div class="p-2 rounded-xl bg-cyan-500/15 border border-cyan-400/50 text-[11px] sm:text-xs text-cyan-200 font-medium flex items-center gap-2">
               <span>🔮</span>
-              <span><b>Sonido de la Canica:</b> El cristal templado vibra cerca de: <em>${this.formatMd(q.perla_caces.slice(0, 135))}...</em></span>
+              <span><b>Sonido de la Canica:</b> El cristal templado resuena firme con: <em>${this.formatMd(q.perla_caces.slice(0, 135))}...</em></span>
             </div>
           ` : ''}
         </div>
 
-        <!-- 4 Opciones de Cristal (A, B, C, D) -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-1.5 sm:gap-2">
           ${options.map((opt, idx) => {
             const isBroken = st.brokenOptionsInCurrentStep.has(opt.id);
@@ -2213,10 +2254,6 @@ export class ArcadeManager {
     });
   }
 
-  /**
-   * Inicia el salto en primera persona (POV) hacia el peldaño elegido (A, B, C o D).
-   * El jugador cae EXACTAMENTE sobre `jumpTargetRow = st.currentStep` (nunca atrás).
-   */
   handleBridgeJump(chosenOptionId = 'A') {
     const st = this.bridgeState;
     if (!st || st.isAnimatingJump || st.awaitingNextStep || st.isGameOver || st.isVictory) return;
@@ -2230,16 +2267,18 @@ export class ArcadeManager {
     st.lastChosenOptionId = chosenOptionId;
     st.anim.hoveredLane = -1;
 
-    // Ocultar globo de diálogo durante el salto para máxima inmersión
+    // Al saltar, centrar la vista hacia adelante automáticamente
+    st.anim.targetUserYaw = 0;
+    st.anim.targetUserPitch = 0;
     st.anim.activeChatter = null;
     this.renderBackPlayerChatterBanner();
 
     st.anim.camMode = 'POV_JUMPING';
     st.anim.jumpStartTime = now;
-    st.anim.jumpDuration = 580;
+    st.anim.jumpDuration = 600;
     st.anim.jumpStartRow = st.anim.playerRow;
     st.anim.jumpStartLane = st.anim.playerLane;
-    st.anim.jumpTargetRow = st.currentStep; // Cae JUSTO ENCIMA del peldaño actual
+    st.anim.jumpTargetRow = st.currentStep; // Aterriza EXACTAMENTE en el centro del peldaño elegido
     st.anim.jumpTargetLane = laneIdx;
     st.anim.jumpWillBreak = !isCorrect;
     st.anim.jumpChosenId = chosenOptionId;
@@ -2248,11 +2287,6 @@ export class ArcadeManager {
     this.updateGlassBridgeDOM();
   }
 
-  /**
-   * Se ejecuta cuando los pies del jugador aterrizan exactamente en el centro del peldaño (`playerRow = currentStep`).
-   * La cámara mira hacia los pies (`cameraPitch = 1.05 rad`) para ver si el vidrio aguanta o se rompe,
-   * y luego levanta la mirada hacia adelante (`cameraPitch -> 0.18 rad`).
-   */
   onPOVJumpLanded() {
     const st = this.bridgeState;
     if (!st) return;
@@ -2264,7 +2298,6 @@ export class ArcadeManager {
     const now = performance.now();
 
     if (isCorrect) {
-      // 1. ¡El vidrio es TEMPLADO! Estás parado encima del peldaño mirando tus zapatillas sobre el cristal verde
       this.playTone('glass_step');
       st.tiles[st.currentStep][laneIdx] = 'safe';
       st.safeLaneHistory[st.currentStep] = laneIdx;
@@ -2277,13 +2310,13 @@ export class ArcadeManager {
 
       st.anim.camMode = 'POV_FLOOR_CHECK_SAFE';
       st.anim.phaseStartTime = now;
-      st.anim.phaseDuration = 920; // 440ms mirando a tus pies en el vidrio templado + 480ms levantando la mirada al frente
+      st.anim.phaseDuration = 940;
       this.updateGlassBridgeDOM();
 
       setTimeout(() => {
         if (!this.bridgeState || st.isGameOver) return;
         st.anim.camMode = 'POV_READY';
-        st.anim.cameraPitch = 0.18;
+        st.anim.cameraPitch = 0.16;
         st.streak += 1;
         const stepBonus = 150 + (st.currentStep * 25) + (st.streak * 20);
         st.score += stepBonus;
@@ -2307,22 +2340,20 @@ export class ArcadeManager {
         this.updateHUD();
         this.renderModeSelectorCards();
         this.updateGlassBridgeDOM();
-      }, 920);
+      }, 940);
     } else {
-      // 2. ¡El vidrio es FALSO!
-      // Si tenía el Escudo Templado activo, el escudo absorbe la rotura y te regresa un paso atrás sin perder la vida
       if (st.shieldActiveInCurrentStep) {
         this.playTone('glass_shatter');
         st.tiles[st.currentStep][laneIdx] = 'broken';
         st.brokenOptionsInCurrentStep.add(chosenOptionId);
-        this.spawnGlassShards3D(st.currentStep, laneIdx, 40);
+        this.spawnGlassShards3D(st.currentStep, laneIdx, 42);
         st.shieldActiveInCurrentStep = false;
         st.anim.playerRow = st.anim.jumpStartRow;
         st.anim.playerLane = st.anim.jumpStartLane;
         st.anim.cameraRow = st.anim.playerRow;
         st.anim.cameraLane = st.anim.playerLane;
-        st.anim.cameraY = 1.18;
-        st.anim.cameraPitch = 0.18;
+        st.anim.cameraY = 1.24;
+        st.anim.cameraPitch = 0.16;
         st.anim.camMode = 'POV_READY';
         st.isAnimatingJump = false;
         this.updateGlassBridgeDOM();
@@ -2336,10 +2367,9 @@ export class ArcadeManager {
         selectedOption: chosenOptionId
       });
 
-      // Sub-fase A (460ms): Miras hacia tus pies y ves cómo el cristal bajo tus zapatillas se llena de grietas
       st.anim.camMode = 'POV_FLOOR_CRACK';
       st.anim.phaseStartTime = now;
-      st.anim.phaseDuration = 460;
+      st.anim.phaseDuration = 480;
       this.updateGlassBridgeDOM();
 
       setTimeout(() => {
@@ -2348,7 +2378,7 @@ export class ArcadeManager {
         this.playTone('glass_shatter');
         st.tiles[st.currentStep][laneIdx] = 'broken';
         st.brokenOptionsInCurrentStep.add(chosenOptionId);
-        this.spawnGlassShards3D(st.currentStep, laneIdx, 58);
+        this.spawnGlassShards3D(st.currentStep, laneIdx, 64);
         st.anim.screenShake = 15;
 
         st.lastFallenPlayerNum = st.anim.playerNumber;
@@ -2360,16 +2390,14 @@ export class ArcadeManager {
         st.tiles[st.currentStep][safeLane] = 'safe';
         st.safeLaneHistory[st.currentStep] = safeLane;
 
-        // Sub-fase B (960ms): El cristal estalla bajo tus pies y caes al vacío en primera persona
         st.anim.camMode = 'POV_FALLING';
         st.anim.phaseStartTime = shatterNow;
-        st.anim.phaseDuration = 960;
+        st.anim.phaseDuration = 980;
         this.updateGlassBridgeDOM();
 
         setTimeout(() => {
           if (!this.bridgeState) return;
 
-          // Si cayó el último jugador (#100, 0 vidas restantes): fin de la partida
           if (st.lives <= 0) {
             this.playTone('flatline');
             st.isAnimatingJump = false;
@@ -2384,11 +2412,9 @@ export class ArcadeManager {
             return;
           }
 
-          // Sub-fase C (1350ms): Transición cinemática clara que enfoca primero en 3ra persona al jugador
-          // que estaba atrás (#058 o #100) parado en el peldaño anterior y hace un zoom suave hacia sus ojos
           const nextSquad = this.getSquadOrderForLives(st.lives);
           const nextLeadNum = nextSquad[0] || (st.lives === 2 ? '058' : '100');
-          const prevRow = st.currentStep > 0 ? (st.currentStep - 1) : -0.82;
+          const prevRow = st.currentStep > 0 ? (st.currentStep - 1) : -1.18;
           const prevLane = st.currentStep > 0 && st.safeLaneHistory[st.currentStep - 1] !== undefined
             ? st.safeLaneHistory[st.currentStep - 1]
             : 1.5;
@@ -2398,20 +2424,18 @@ export class ArcadeManager {
           st.anim.playerLane = prevLane;
           st.anim.camMode = 'RELAY_REVEAL_BEHIND';
           st.anim.phaseStartTime = performance.now();
-          st.anim.phaseDuration = 1350;
+          st.anim.phaseDuration = 1450;
           this.playTone('popup_open');
           this.triggerBackPlayerTaunt('fell');
           this.updateGlassBridgeDOM();
 
-          // Sub-fase D: Una vez dentro del POV del jugador de atrás (#058 o #100), salta al vidrio templado,
-          // mira sus pies sobre el vidrio seguro y luego mira hacia adelante
           setTimeout(() => {
             if (!this.bridgeState || st.isGameOver) return;
             const relayNow = performance.now();
             this.playTone('jump');
             st.anim.camMode = 'POV_RELAY_JUMP';
             st.anim.jumpStartTime = relayNow;
-            st.anim.jumpDuration = 580;
+            st.anim.jumpDuration = 600;
             st.anim.jumpStartRow = prevRow;
             st.anim.jumpStartLane = prevLane;
             st.anim.jumpTargetRow = st.currentStep;
@@ -2431,21 +2455,21 @@ export class ArcadeManager {
               });
               st.anim.camMode = 'POV_FLOOR_CHECK_SAFE';
               st.anim.phaseStartTime = performance.now();
-              st.anim.phaseDuration = 880;
+              st.anim.phaseDuration = 900;
               this.updateGlassBridgeDOM();
 
               setTimeout(() => {
                 if (!this.bridgeState || st.isGameOver) return;
                 st.anim.camMode = 'POV_READY';
-                st.anim.cameraPitch = 0.18;
+                st.anim.cameraPitch = 0.16;
                 st.isAnimatingJump = false;
                 st.awaitingNextStep = true;
                 this.updateGlassBridgeDOM();
-              }, 880);
-            }, 580);
-          }, 1350);
-        }, 960);
-      }, 460);
+              }, 900);
+            }, 600);
+          }, 1450);
+        }, 980);
+      }, 480);
     }
   }
 
@@ -2456,12 +2480,14 @@ export class ArcadeManager {
     if (st.currentStep + 1 >= st.totalSteps) {
       const now = performance.now();
       st.isAnimatingJump = true;
+      st.anim.targetUserYaw = 0;
+      st.anim.targetUserPitch = 0;
       st.anim.camMode = 'POV_RELAY_JUMP';
       st.anim.jumpStartTime = now;
-      st.anim.jumpDuration = 580;
+      st.anim.jumpDuration = 620;
       st.anim.jumpStartRow = st.anim.playerRow;
       st.anim.jumpStartLane = st.anim.playerLane;
-      st.anim.jumpTargetRow = st.totalSteps + 0.35;
+      st.anim.jumpTargetRow = st.totalSteps + 0.45;
       st.anim.jumpTargetLane = 1.5;
       this.playTone('jump');
 
@@ -2485,7 +2511,7 @@ export class ArcadeManager {
         this.updateHUD();
         this.renderModeSelectorCards();
         this.updateGlassBridgeDOM();
-      }, 600);
+      }, 640);
       return;
     }
 
@@ -2496,16 +2522,17 @@ export class ArcadeManager {
     st.awaitingNextStep = false;
     st.lastJumpOutcome = null;
     st.lastChosenOptionId = null;
+    st.anim.targetUserYaw = 0;
+    st.anim.targetUserPitch = 0;
     st.anim.camMode = 'POV_READY';
-    st.anim.cameraPitch = 0.18;
+    st.anim.cameraPitch = 0.16;
     this.playTone('beep');
     this.updateGlassBridgeDOM();
 
-    // Disparar como máximo 1 frase para este nuevo peldaño
     this.scheduleSingleStepDialogue(850);
   }
 
-  spawnGlassShards3D(row, lane, count = 52) {
+  spawnGlassShards3D(row, lane, count = 56) {
     if (!this.bridgeState) return;
     const laneCenterX = (lane - 1.5) * 0.94;
     const rowCenterZ = row;
@@ -2522,7 +2549,7 @@ export class ArcadeManager {
         y: (Math.random() - 0.5) * 0.08,
         z: rowCenterZ + (Math.random() - 0.5) * 0.62,
         vx: (Math.random() - 0.5) * 0.052,
-        vy: 0.018 - Math.random() * 0.058,
+        vy: 0.018 - Math.random() * 0.062,
         vz: (Math.random() - 0.5) * 0.038,
         size: 7 + Math.random() * 15,
         rot: Math.random() * Math.PI * 2,
@@ -2534,7 +2561,7 @@ export class ArcadeManager {
   }
 
   // =========================================================================
-  // BUCLE DE FÍSICAS Y CÁMARA POV EN PRIMERA PERSONA A 60FPS
+  // MOTOR DE FÍSICAS, PROYECCIÓN 360° Y SOMBRAS DIRECCIONALES EN TIEMPO REAL
   // =========================================================================
   startGlassBridgeRenderLoop() {
     const loop = (now) => {
@@ -2573,63 +2600,69 @@ export class ArcadeManager {
       anim.screenShake = 0;
     }
 
-    // 1. PLANO INICIAL DE LOS 3 JUGADORES ('INTRO_SQUAD') -> TRANSICIÓN AL POV DE #456
+    // Suavizado de la rotación libre 360° del usuario (Yaw + Pitch)
+    anim.userYaw += (anim.targetUserYaw - anim.userYaw) * 0.18;
+    anim.userPitch += (anim.targetUserPitch - anim.userPitch) * 0.18;
+
+    // 1. PLANO INICIAL ('INTRO_SQUAD') mostrando la Plataforma de Salida con #456, #058 y #100
     if (anim.camMode === 'INTRO_SQUAD') {
       const elapsed = Math.max(0, now - anim.introStartTime);
       const t = Math.min(1, elapsed / anim.introDuration);
       if (t < 0.62) {
-        anim.cameraRow = -2.35 + (t / 0.62) * 0.28;
-        anim.cameraLane = 1.5;
-        anim.cameraY = 1.52;
+        anim.cameraRow = -3.15 + (t / 0.62) * 0.35;
+        anim.cameraLane = 1.5 + Math.sin(t * Math.PI) * 0.25;
+        anim.cameraY = 1.72;
         anim.cameraPitch = 0.14;
+        anim.cameraYaw = 0;
       } else {
         const zt = (t - 0.62) / 0.38;
         const ease = zt < 0.5 ? 2 * zt * zt : 1 - Math.pow(-2 * zt + 2, 2) / 2;
-        anim.cameraRow = -2.07 + (anim.playerRow - (-2.07)) * ease;
+        anim.cameraRow = -2.80 + (anim.playerRow - (-2.80)) * ease;
         anim.cameraLane = 1.5;
-        anim.cameraY = 1.52 + (1.18 - 1.52) * ease;
-        anim.cameraPitch = 0.14 + (0.18 - 0.14) * ease;
+        anim.cameraY = 1.72 + (1.24 - 1.72) * ease;
+        anim.cameraPitch = 0.14 + (0.16 - 0.14) * ease;
+        anim.cameraYaw = 0;
       }
       if (t >= 1) {
         anim.camMode = 'POV_READY';
         anim.cameraRow = anim.playerRow;
         anim.cameraLane = anim.playerLane;
-        anim.cameraY = 1.18;
-        anim.cameraPitch = 0.18;
+        anim.cameraY = 1.24;
+        anim.cameraPitch = 0.16;
+        anim.cameraYaw = 0;
         this.updateGlassBridgeDOM();
       }
     }
 
-    // 2. MODO POV LISTO PARA SALTAR ('POV_READY')
-    // La cámara está exactamente en (playerRow, playerLane) mirando hacia adelante (pitch = 0.18 rad)
+    // 2. MODO POV LISTO PARA SALTAR ('POV_READY') + CÁMARA LIBRE 360°
     else if (anim.camMode === 'POV_READY') {
       anim.cameraRow += (anim.playerRow - anim.cameraRow) * 0.18;
       anim.cameraLane += (anim.playerLane - anim.cameraLane) * 0.18;
-      anim.cameraY = 1.18 + Math.sin(now * 0.0035) * 0.014;
-      anim.cameraPitch += (0.18 - anim.cameraPitch) * 0.16;
+      anim.cameraY = 1.24 + Math.sin(now * 0.0035) * 0.015;
+      anim.cameraPitch = 0.16 + anim.userPitch;
+      anim.cameraYaw = anim.userYaw;
       anim.cameraRoll *= 0.8;
     }
 
-    // 3. SALTO EN PRIMERA PERSONA CAYENDO EXACTAMENTE EN EL PELDAÑO Y MIRANDO A LOS PIES ('POV_JUMPING' o 'POV_RELAY_JUMP')
+    // 3. SALTO EN PRIMERA PERSONA CAYENDO EXACTAMENTE EN EL PELDAÑO Y MIRANDO A LOS PIES ('POV_JUMPING' / 'POV_RELAY_JUMP')
     else if (anim.camMode === 'POV_JUMPING' || anim.camMode === 'POV_RELAY_JUMP') {
       const elapsed = Math.max(0, now - anim.jumpStartTime);
       const t = Math.min(1, elapsed / anim.jumpDuration);
       const easeT = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
 
-      // Avanza hasta quedar exactamente encima del centro del peldaño (jumpTargetRow = st.currentStep)
       anim.playerRow = anim.jumpStartRow + (anim.jumpTargetRow - anim.jumpStartRow) * easeT;
       anim.playerLane = anim.jumpStartLane + (anim.jumpTargetLane - anim.jumpStartLane) * easeT;
       anim.cameraRow = anim.playerRow;
       anim.cameraLane = anim.playerLane;
-      anim.cameraY = 1.18 + Math.sin(t * Math.PI) * 0.95;
+      anim.cameraY = 1.24 + Math.sin(t * Math.PI) * 1.02;
+      anim.cameraYaw = 0;
 
-      // Al despegar mira hacia el peldaño objetivo y al ir cayendo inclina la cámara hacia los pies (1.05 rad = 60°)
-      if (t < 0.30) {
-        anim.cameraPitch = 0.18 + (t / 0.30) * 0.18;
+      if (t < 0.28) {
+        anim.cameraPitch = 0.16 + (t / 0.28) * 0.18;
       } else {
-        const lookDownT = (t - 0.30) / 0.70;
+        const lookDownT = (t - 0.28) / 0.72;
         const smoothDown = lookDownT < 0.5 ? 2 * lookDownT * lookDownT : 1 - Math.pow(-2 * lookDownT + 2, 2) / 2;
-        anim.cameraPitch = 0.36 + smoothDown * 0.69; // Termina en 1.05 rad (60° mirando directo a tus zapatillas sobre el vidrio)
+        anim.cameraPitch = 0.34 + smoothDown * 0.72; // 1.06 rad (~61° mirando directo a tus pies sobre el vidrio)
       }
 
       if (t >= 1 && anim.camMode === 'POV_JUMPING') {
@@ -2637,92 +2670,85 @@ export class ArcadeManager {
         anim.playerLane = anim.jumpTargetLane;
         anim.cameraRow = anim.playerRow;
         anim.cameraLane = anim.playerLane;
-        anim.cameraY = 1.15;
-        anim.cameraPitch = 1.05;
+        anim.cameraY = 1.20;
+        anim.cameraPitch = 1.06;
         this.onPOVJumpLanded();
       }
     }
 
-    // 4. PARADO SOBRE EL PELDAÑO MIRANDO TUS PIES EN EL VIDRIO TEMPLADO Y LUEGO MIRANDO AL FRENTE ('POV_FLOOR_CHECK_SAFE')
+    // 4. MIRANDO TUS PIES EN EL VIDRIO TEMPLADO Y LUEGO LEVANTANDO LA VISTA AL FRENTE ('POV_FLOOR_CHECK_SAFE')
     else if (anim.camMode === 'POV_FLOOR_CHECK_SAFE') {
       const elapsed = Math.max(0, now - anim.phaseStartTime);
       const t = Math.min(1, elapsed / anim.phaseDuration);
       anim.cameraRow = anim.playerRow;
       anim.cameraLane = anim.playerLane;
+      anim.cameraYaw = 0;
       if (t < 0.48) {
-        // Primera mitad (0 a 440ms): miras directamente tus zapatillas paradas sobre el vidrio templado verde
-        anim.cameraPitch = 1.05;
-        anim.cameraY = 1.15;
+        anim.cameraPitch = 1.06;
+        anim.cameraY = 1.20;
       } else {
-        // Segunda mitad (440ms a 920ms): levantas la mirada suavemente hacia adelante (donde ya te espera el siguiente peldaño)
         const upT = (t - 0.48) / 0.52;
         const easeUp = upT < 0.5 ? 2 * upT * upT : 1 - Math.pow(-2 * upT + 2, 2) / 2;
-        anim.cameraPitch = 1.05 + (0.18 - 1.05) * easeUp;
-        anim.cameraY = 1.15 + (1.18 - 1.15) * easeUp;
+        anim.cameraPitch = 1.06 + (0.16 - 1.06) * easeUp;
+        anim.cameraY = 1.20 + (1.24 - 1.20) * easeUp;
       }
     }
 
-    // 5. MIRANDO EL CRISTAL AGRIETARSE BAJO TUS PIES ('POV_FLOOR_CRACK')
+    // 5. MIRANDO EL CRISTAL AGRIETARSE BAJO TUS ZAPATILLAS ('POV_FLOOR_CRACK')
     else if (anim.camMode === 'POV_FLOOR_CRACK') {
       anim.cameraRow = anim.playerRow;
       anim.cameraLane = anim.playerLane;
-      anim.cameraPitch = 1.05; // Mirando directo a tus pies mientras el vidrio se raja
-      anim.cameraY = 1.12;
+      anim.cameraPitch = 1.06;
+      anim.cameraYaw = 0;
+      anim.cameraY = 1.16;
       anim.screenShake = 6;
     }
 
-    // 6. CAÍDA AL VACÍO EN PRIMERA PERSONA ('POV_FALLING')
+    // 6. CAÍDA AL ABISMO EN PRIMERA PERSONA ('POV_FALLING')
     else if (anim.camMode === 'POV_FALLING') {
       const elapsed = Math.max(0, now - anim.phaseStartTime);
       const t = Math.min(1, elapsed / anim.phaseDuration);
       anim.cameraRow = anim.playerRow;
       anim.cameraLane = anim.playerLane;
-      anim.cameraY = 1.12 - (t * t) * 6.4;
-      anim.cameraPitch = 1.05 - t * 1.25; // Mientras cae al abismo, la vista gira viendo el puente alejarse arriba
-      anim.cameraRoll = Math.sin(t * Math.PI * 2.5) * 0.18;
+      anim.cameraY = 1.16 - (t * t) * 7.5;
+      anim.cameraPitch = 1.06 - t * 1.38;
+      anim.cameraYaw = 0;
+      anim.cameraRoll = Math.sin(t * Math.PI * 2.5) * 0.20;
     }
 
-    // 7. TRANSICIÓN CINEMÁTICA AL PERDER UNA VIDA ('RELAY_REVEAL_BEHIND'):
-    //    Muestra primero al jugador que estaba atrás (#058 o #100) parado en el peldaño anterior
-    //    y luego acerca la cámara suavemente hacia su cabeza para entrar en su POV.
+    // 7. TRANSICIÓN CINEMÁTICA AL PERDER UNA VIDA ('RELAY_REVEAL_BEHIND')
     else if (anim.camMode === 'RELAY_REVEAL_BEHIND') {
       const elapsed = Math.max(0, now - anim.phaseStartTime);
       const t = Math.min(1, elapsed / anim.phaseDuration);
-      if (t < 0.52) {
-        // Parte 1 (0 a 700ms): Plano en 3ra persona detrás/diagonal al jugador sobreviviente (#058 o #100)
-        // para que el usuario vea claramente quién estaba atrás y va a tomar el relevo
-        const p1 = t / 0.52;
+      anim.cameraYaw = 0;
+      if (t < 0.55) {
+        const p1 = t / 0.55;
         const ease1 = 1 - Math.pow(1 - p1, 2);
-        anim.cameraRow = (anim.playerRow - 1.35) + ease1 * 0.25;
+        anim.cameraRow = (anim.playerRow - 1.48) + ease1 * 0.25;
         anim.cameraLane = anim.playerLane + (1 - ease1) * 0.35;
-        anim.cameraY = 1.58 - ease1 * 0.10;
-        anim.cameraPitch = 0.22;
-        anim.cameraRoll = 0;
+        anim.cameraY = 1.62 - ease1 * 0.08;
+        anim.cameraPitch = 0.20;
       } else {
-        // Parte 2 (700ms a 1350ms): Zoom suave hacia los ojos del jugador de atrás para entrar en su POV
-        const p2 = (t - 0.52) / 0.48;
+        const p2 = (t - 0.55) / 0.45;
         const ease2 = p2 < 0.5 ? 2 * p2 * p2 : 1 - Math.pow(-2 * p2 + 2, 2) / 2;
-        anim.cameraRow = (anim.playerRow - 1.10) + (anim.playerRow - (anim.playerRow - 1.10)) * ease2;
+        anim.cameraRow = (anim.playerRow - 1.23) + (anim.playerRow - (anim.playerRow - 1.23)) * ease2;
         anim.cameraLane = anim.playerLane;
-        anim.cameraY = 1.48 + (1.18 - 1.48) * ease2;
-        anim.cameraPitch = 0.22 + (0.18 - 0.22) * ease2;
-        anim.cameraRoll = 0;
+        anim.cameraY = 1.54 + (1.24 - 1.54) * ease2;
+        anim.cameraPitch = 0.20 + (0.16 - 0.20) * ease2;
       }
     }
 
-    // Actualizar fragmentos de vidrio roto
     for (let i = anim.shards.length - 1; i >= 0; i--) {
       const s = anim.shards[i];
       s.x += s.vx;
       s.y += s.vy;
       s.z += s.vz;
-      s.vy -= 0.0032;
+      s.vy -= 0.0034;
       s.rot += s.vRot;
-      s.alpha -= 0.022;
+      s.alpha -= 0.020;
       if (s.alpha <= 0) anim.shards.splice(i, 1);
     }
 
-    // Actualizar ondas de impacto en vidrio templado
     for (let i = anim.shockwaves.length - 1; i >= 0; i--) {
       const w = anim.shockwaves[i];
       w.radius += 0.045;
@@ -2732,32 +2758,47 @@ export class ArcadeManager {
   }
 
   /**
-   * Proyección 3D con Matriz de Rotación de Cabeza (Pitch 3D real alrededor del eje X de la cámara).
-   * Gracias a esta rotación geométrica real, cuando el jugador está parado EXACTAMENTE encima
-   * del peldaño `r` (`camZ = r`) e inclina la vista hacia sus pies (`pitch = 1.05 rad`),
-   * el vidrio bajo sus pies tiene profundidad positiva (`rotZ > 0`) y se ve justo debajo de sus zapatillas.
+   * Proyección 3D Gran Angular con Rotación Completa en 3 Ejes (Yaw Horizontal 360° + Pitch Vertical).
+   * Permite girar la cabeza para ver el techo, el abismo, los guardianes en la meta y los jugadores de atrás.
    */
-  projectBridge3DPoint(worldX, worldY, worldZ, camX, camY, camZ, pitch, focal, cx, cy) {
+  projectBridge3DPoint(worldX, worldY, worldZ, camX, camY, camZ, yaw, pitch, focal, cx, cy) {
     const dx = worldX - camX;
-    const dy = camY - worldY; // positivo hacia abajo (el suelo está en worldY = 0 y los ojos en camY = 1.18)
-    const dz = worldZ - camZ; // positivo hacia adelante a lo largo del puente
+    const dy = camY - worldY; // positivo hacia abajo (suelo en worldY=0, techo en worldY=+5.5, abismo en worldY=-18)
+    const dz = worldZ - camZ; // positivo hacia adelante rumbo a la meta
 
+    // 1. Rotación horizontal Yaw (alrededor del eje Y)
+    const cosY = Math.cos(yaw);
+    const sinY = Math.sin(yaw);
+    const yawX = dx * cosY - dz * sinY;
+    const yawZ = dz * cosY + dx * sinY;
+
+    // 2. Rotación vertical Pitch (alrededor del eje X local de la cámara)
     const cosP = Math.cos(pitch);
     const sinP = Math.sin(pitch);
+    const rotZ = yawZ * cosP + dy * sinP;
+    const rotY = dy * cosP - yawZ * sinP;
 
-    // Profundidad a lo largo del rayo visual de la cámara y coordenada vertical perpendicular
-    const rotZ = dz * cosP + dy * sinP;
-    const rotY = dy * cosP - dz * sinP;
-
-    const safeDepth = Math.max(0.16, rotZ);
+    const safeDepth = Math.max(0.14, rotZ);
     const scale = focal / safeDepth;
 
     return {
-      x: cx + dx * scale,
+      x: cx + yawX * scale,
       y: cy + rotY * scale,
       scale,
       depth: rotZ
     };
+  }
+
+  /**
+   * Proyección geométrica de Sombra Direccional en Tiempo Real (Ray-Plane Intersection)
+   * desde el reflector principal `L = (lightX, lightY, lightZ)` sobre el plano `y = floorY`.
+   */
+  projectDirectionalShadowPoint(wx, wy, wz, floorY, lightX, lightY, lightZ, projFn) {
+    const denom = (wy - lightY) || -0.001;
+    const t = (floorY - lightY) / denom;
+    const sx = lightX + (wx - lightX) * t;
+    const sz = lightZ + (wz - lightZ) * t;
+    return projFn(sx, floorY + 0.004, sz);
   }
 
   drawGlassBridge3DScene(canvas, now) {
@@ -2769,13 +2810,22 @@ export class ArcadeManager {
     const W = canvas.width;
     const H = canvas.height;
     const cx = W * 0.5;
-    const cy = H * 0.34;
-    const focal = Math.min(W, H) * 0.92;
+    const cy = H * 0.46; // Horizonte centrado para gran angular
+    // Lente Gran Angular (~98° FOV) para que se vea amplio todo el coliseo, la plataforma, el techo y la meta
+    const focal = Math.min(W, H) * 0.62;
 
     const camX = (anim.cameraLane - 1.5) * 0.94;
     const camY = anim.cameraY;
     const camZ = anim.cameraRow;
-    const pitch = anim.cameraPitch;
+    const yaw = anim.cameraYaw || 0;
+    const pitch = anim.cameraPitch || 0.16;
+
+    // Posición en tiempo real del reflector direccional principal del techo (para cálculo de sombras reales)
+    const mainLightX = Math.sin(now * 0.0008) * 1.45;
+    const mainLightY = 6.2;
+    const mainLightZ = camZ + 2.2 + Math.cos(now * 0.0006) * 0.9;
+
+    const proj = (wx, wy, wz) => this.projectBridge3DPoint(wx, wy, wz, camX, camY, camZ, yaw, pitch, focal, cx, cy);
 
     ctx.save();
     if (anim.screenShake > 0) {
@@ -2785,98 +2835,39 @@ export class ArcadeManager {
       );
     }
 
-    // 1. Fondo del Coliseo Squid Game
+    // 1. FONDO DEL COLISEO Y ABISMO PROFUNDO
     const skyGrad = ctx.createLinearGradient(0, 0, 0, H);
-    skyGrad.addColorStop(0, '#070312');
-    skyGrad.addColorStop(0.55, '#130826');
-    skyGrad.addColorStop(1, '#04010a');
+    skyGrad.addColorStop(0, '#05020a');
+    skyGrad.addColorStop(0.42, '#130724');
+    skyGrad.addColorStop(0.75, '#0b0316');
+    skyGrad.addColorStop(1, '#020005');
     ctx.fillStyle = skyGrad;
     ctx.fillRect(0, 0, W, H);
 
-    // Haces de luz volumétricos
-    [
-      { x: W * 0.22, col: 'rgba(244, 63, 94, 0.10)' },
-      { x: W * 0.78, col: 'rgba(16, 185, 129, 0.10)' }
-    ].forEach(beam => {
-      ctx.beginPath();
-      ctx.moveTo(beam.x, 0);
-      ctx.lineTo(beam.x - W * 0.25, H);
-      ctx.lineTo(beam.x + W * 0.25, H);
-      ctx.closePath();
-      const g = ctx.createLinearGradient(0, 0, 0, H);
-      g.addColorStop(0, beam.col);
-      g.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = g;
-      ctx.fill();
-    });
+    // 2. CORTINAJES DE CIRCO EN LAS PAREDES LATERALES Y PILARES DEL ABISMO
+    this.drawColiseumWallsAndAbyss3D(ctx, proj, st, now, W, H);
 
-    const proj = (wx, wy, wz) => this.projectBridge3DPoint(wx, wy, wz, camX, camY, camZ, pitch, focal, cx, cy);
+    // 3. TECHO ABOVEDADO CON VIGAS DE ACERO, ANILLOS DORADOS Y REFLECTORES VOLUMÉTRICOS
+    this.drawColiseumCeilingAndLights3D(ctx, proj, st, now, mainLightX, mainLightY, mainLightZ);
 
-    // 2. Vigas de acero rosas a lo largo de los 4 carriles (A, B, C, D)
-    [-1.88, -0.94, 0, 0.94, 1.88].forEach(railX => {
-      const zStart = Math.max(-1.8, camZ - 0.5);
-      const zEnd = st.totalSteps + 1.2;
-      const p1 = proj(railX, -0.03, zStart);
-      const p2 = proj(railX, -0.03, zEnd);
-      if (p1.depth > 0.15 || p2.depth > 0.15) {
-        ctx.strokeStyle = 'rgba(244, 63, 94, 0.72)';
-        ctx.lineWidth = Math.max(1.5, Math.min(7, p1.scale * 0.022));
-        ctx.beginPath();
-        ctx.moveTo(p1.x, p1.y);
-        ctx.lineTo(p2.x, p2.y);
-        ctx.stroke();
-      }
-    });
+    // 4. PLATAFORMA DE SALIDA (CON FRANJA DE PELIGRO AMARILLA/NEGRA Y BARANDALES)
+    this.drawStartPlatform3D(ctx, proj, now);
 
-    // 3. Plataforma de salida (detrás del peldaño 0)
-    {
-      const sTL = proj(-1.95, 0, -0.52);
-      const sTR = proj(1.95, 0, -0.52);
-      const sBR = proj(1.95, 0, -2.15);
-      const sBL = proj(-1.95, 0, -2.15);
-      if (sTL.depth > 0.18 && sBR.depth > 0.18) {
-        ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
-        ctx.strokeStyle = 'rgba(16, 185, 129, 0.65)';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(sTL.x, sTL.y);
-        ctx.lineTo(sTR.x, sTR.y);
-        ctx.lineTo(sBR.x, sBR.y);
-        ctx.lineTo(sBL.x, sBL.y);
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
-      }
-    }
+    // 5. PLATAFORMA DE META AL FINAL DEL PUENTE CON ARCO NEÓN Y LOS 3 GUARDIANES ROSAS (○ △ □)
+    this.drawFinishPlatformAndGuards3D(ctx, proj, st, now, mainLightX, mainLightY, mainLightZ);
 
-    // 4. Plataforma de Meta VIP al final del puente
-    {
-      const fNear = st.totalSteps - 0.35;
-      const fFar = st.totalSteps + 0.85;
-      const fTL = proj(-1.95, 0, fFar);
-      const fTR = proj(1.95, 0, fFar);
-      const fBR = proj(1.95, 0, fNear);
-      const fBL = proj(-1.95, 0, fNear);
-      if (fTL.depth > 0.2 && fBR.depth > 0.2) {
-        ctx.fillStyle = 'rgba(16, 185, 129, 0.28)';
-        ctx.strokeStyle = '#34d399';
-        ctx.lineWidth = 2.2;
-        ctx.beginPath();
-        ctx.moveTo(fTL.x, fTL.y);
-        ctx.lineTo(fTR.x, fTR.y);
-        ctx.lineTo(fBR.x, fBR.y);
-        ctx.lineTo(fBL.x, fBL.y);
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
-      }
-    }
+    // 6. VIGAS ESTRUCTURALES DE ACERO ROSA CON CARAS 3D Y PERNOS
+    this.drawSteelBridgeRails3D(ctx, proj, st);
 
-    // 5. Dibujar todos los peldaños de cristal (del más lejano al más cercano, incluyendo el peldaño bajo tus pies)
+    // 7. PELDAÑOS DE CRISTAL 3D (CON ESPESOR FÍSICO DE 6CM, ABRAZADERAS METÁLICAS Y SOMBRAS DIRECCIONALES)
     anim.tileHitRegions = [];
     const letters = ['A', 'B', 'C', 'D'];
 
-    for (let r = st.totalSteps - 1; r >= 0; r--) {
+    // Ordenar peldaños por distancia a la cámara para pintado correcto tanto mirando al frente como mirando atrás
+    const stepIndices = Array.from({ length: st.totalSteps }, (_, i) => i);
+    stepIndices.sort((a, b) => Math.abs(b - camZ) - Math.abs(a - camZ));
+
+    for (const r of stepIndices) {
       const zNear = r - 0.36;
       const zFar = r + 0.36;
       const isCurrentTargetStep = (r === st.currentStep) && !st.awaitingNextStep && !st.isGameOver && !st.isVictory;
@@ -2888,20 +2879,37 @@ export class ArcadeManager {
         const xCenter = (lane - 1.5) * 0.94;
         const xLeft = xCenter - 0.41;
         const xRight = xCenter + 0.41;
+        const thicknessY = -0.055; // Espesor físico 3D del bloque de cristal templado
 
         const pTL = proj(xLeft, 0, zFar);
         const pTR = proj(xRight, 0, zFar);
         const pBR = proj(xRight, 0, zNear);
         const pBL = proj(xLeft, 0, zNear);
 
-        // Si las 4 esquinas están detrás de la lente, omitir
-        if (pTL.depth <= 0.16 && pTR.depth <= 0.16 && pBR.depth <= 0.16 && pBL.depth <= 0.16) continue;
+        if (pTL.depth <= 0.15 && pTR.depth <= 0.15 && pBR.depth <= 0.15 && pBL.depth <= 0.15) continue;
+
+        const bBL = proj(xLeft, thicknessY, zNear);
+        const bBR = proj(xRight, thicknessY, zNear);
 
         const isHovered = isCurrentTargetStep && anim.hoveredLane === lane;
         const isSafe = tileState === 'safe';
         const isCrackingNow = (anim.camMode === 'POV_FLOOR_CRACK') && r === st.currentStep && lane === anim.jumpTargetLane;
 
         ctx.save();
+
+        // Cara lateral/frontal 3D de espesor del bloque de vidrio
+        if (bBL.depth > 0.15 && bBR.depth > 0.15) {
+          ctx.fillStyle = isSafe ? 'rgba(6, 95, 70, 0.85)' : 'rgba(30, 58, 138, 0.55)';
+          ctx.beginPath();
+          ctx.moveTo(pBL.x, pBL.y);
+          ctx.lineTo(pBR.x, pBR.y);
+          ctx.lineTo(bBR.x, bBR.y);
+          ctx.lineTo(bBL.x, bBL.y);
+          ctx.closePath();
+          ctx.fill();
+        }
+
+        // Superficie superior del cristal
         ctx.beginPath();
         ctx.moveTo(pTL.x, pTL.y);
         ctx.lineTo(pTR.x, pTR.y);
@@ -2910,60 +2918,65 @@ export class ArcadeManager {
         ctx.closePath();
 
         if (isCrackingNow) {
-          ctx.fillStyle = 'rgba(244, 63, 94, 0.48)';
-          ctx.strokeStyle = '#fda4af';
-          ctx.lineWidth = 3;
-        } else if (isSafe) {
-          ctx.fillStyle = 'rgba(16, 185, 129, 0.52)';
-          ctx.strokeStyle = '#34d399';
-          ctx.lineWidth = 3;
-        } else if (isHovered) {
-          ctx.fillStyle = 'rgba(56, 189, 248, 0.42)';
-          ctx.strokeStyle = '#7dd3fc';
+          ctx.fillStyle = 'rgba(244, 63, 94, 0.52)';
+          ctx.strokeStyle = '#fecdd3';
           ctx.lineWidth = 2.8;
+        } else if (isSafe) {
+          ctx.fillStyle = 'rgba(16, 185, 129, 0.50)';
+          ctx.strokeStyle = '#6ee7b7';
+          ctx.lineWidth = 2.6;
+        } else if (isHovered) {
+          ctx.fillStyle = 'rgba(56, 189, 248, 0.44)';
+          ctx.strokeStyle = '#bae6fd';
+          ctx.lineWidth = 2.6;
         } else if (isCurrentTargetStep) {
           const pulse = 0.5 + 0.5 * Math.sin(now * 0.006);
-          ctx.fillStyle = `rgba(56, 189, 248, ${0.20 + pulse * 0.12})`;
-          ctx.strokeStyle = `rgba(125, 211, 252, ${0.72 + pulse * 0.25})`;
-          ctx.lineWidth = 2.2;
+          ctx.fillStyle = `rgba(56, 189, 248, ${0.19 + pulse * 0.12})`;
+          ctx.strokeStyle = `rgba(125, 211, 252, ${0.75 + pulse * 0.22})`;
+          ctx.lineWidth = 2.1;
         } else {
-          ctx.fillStyle = 'rgba(148, 163, 184, 0.17)';
-          ctx.strokeStyle = 'rgba(148, 163, 184, 0.45)';
+          ctx.fillStyle = 'rgba(186, 230, 253, 0.15)';
+          ctx.strokeStyle = 'rgba(148, 163, 184, 0.52)';
           ctx.lineWidth = 1.4;
         }
-
         ctx.fill();
         ctx.stroke();
 
-        // Reflejo diagonal del cristal
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.22)';
-        ctx.lineWidth = 1;
+        // Abrazaderas metálicas de sujeción en las 4 esquinas del vidrio
+        ctx.fillStyle = '#cbd5e1';
+        [pTL, pTR, pBR, pBL].forEach(corner => {
+          const clampSz = Math.max(1.8, Math.min(5, corner.scale * 0.015));
+          ctx.fillRect(corner.x - clampSz * 0.5, corner.y - clampSz * 0.5, clampSz, clampSz);
+        });
+
+        // Doble línea de reflexión especular del reflector sobre el cristal
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.28)';
+        ctx.lineWidth = 1.1;
         ctx.beginPath();
-        ctx.moveTo(pTL.x + (pTR.x - pTL.x) * 0.18, pTL.y + (pBL.y - pTL.y) * 0.18);
-        ctx.lineTo(pTL.x + (pTR.x - pTL.x) * 0.62, pTL.y + (pBL.y - pTL.y) * 0.82);
+        ctx.moveTo(pTL.x + (pTR.x - pTL.x) * 0.16, pTL.y + (pBL.y - pTL.y) * 0.15);
+        ctx.lineTo(pTL.x + (pTR.x - pTL.x) * 0.58, pTL.y + (pBL.y - pTL.y) * 0.85);
         ctx.stroke();
 
-        // Si el vidrio se está rajando bajo tus pies ('POV_FLOOR_CRACK'), dibujar las grietas radiales
+        // Grietas radiales si se está rompiendo bajo tus pies
         if (isCrackingNow) {
           const midX = (pTL.x + pTR.x + pBR.x + pBL.x) * 0.25;
           const midY = (pTL.y + pTR.y + pBR.y + pBL.y) * 0.25;
           ctx.strokeStyle = '#ffffff';
           ctx.lineWidth = 2.2;
-          for (let c = 0; c < 9; c++) {
-            const ang = (c / 9) * Math.PI * 2 + 0.25;
+          for (let c = 0; c < 10; c++) {
+            const ang = (c / 10) * Math.PI * 2 + 0.2;
             ctx.beginPath();
             ctx.moveTo(midX, midY);
-            ctx.lineTo(midX + Math.cos(ang) * 34, midY + Math.sin(ang) * 20);
+            ctx.lineTo(midX + Math.cos(ang) * 36, midY + Math.sin(ang) * 22);
             ctx.stroke();
           }
         }
 
-        // Etiqueta A, B, C, D en el peldaño objetivo
         if (isCurrentTargetStep || isSafe) {
-          const centerPt = proj(xCenter, 0, r);
-          if (centerPt.depth > 0.22) {
+          const centerPt = proj(xCenter, 0.01, r);
+          if (centerPt.depth > 0.2) {
             ctx.fillStyle = isSafe ? '#ecfdf5' : '#e0f2fe';
-            ctx.font = `900 ${Math.max(11, Math.min(22, Math.round(centerPt.scale * 0.16)))}px "JetBrains Mono", monospace`;
+            ctx.font = `900 ${Math.max(11, Math.min(20, Math.round(centerPt.scale * 0.15)))}px "JetBrains Mono", monospace`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText(letters[lane], centerPt.x, centerPt.y);
@@ -2981,11 +2994,11 @@ export class ArcadeManager {
       }
     }
 
-    // 6. Ondas verdes de confirmación sobre el vidrio templado
+    // 8. ONDAS DE IMPACTO Y CANICA 3D
     for (const w of anim.shockwaves) {
       const wx = (w.lane - 1.5) * 0.94;
-      const p = proj(wx, 0, w.row);
-      if (p.depth <= 0.16) continue;
+      const p = proj(wx, 0.01, w.row);
+      if (p.depth <= 0.15) continue;
       ctx.save();
       ctx.strokeStyle = `rgba(52, 211, 153, ${w.alpha})`;
       ctx.lineWidth = 3;
@@ -2995,7 +3008,6 @@ export class ArcadeManager {
       ctx.restore();
     }
 
-    // 7. Animación de la canica si el usuario activó "🔮 Tirar Canica"
     if (anim.marbleAnim) {
       const m = anim.marbleAnim;
       const mt = Math.min(1, (now - m.startTime) / m.duration);
@@ -3003,7 +3015,7 @@ export class ArcadeManager {
       const mLane = m.startLane + (m.targetLane - m.startLane) * mt;
       const mY = Math.abs(Math.sin(mt * Math.PI * 2.5)) * (1 - mt * 0.6) * 0.45;
       const mp = proj((mLane - 1.5) * 0.94, mY, mRow);
-      if (mp.depth > 0.16) {
+      if (mp.depth > 0.15) {
         ctx.save();
         ctx.fillStyle = '#38bdf8';
         ctx.strokeStyle = '#ffffff';
@@ -3014,15 +3026,13 @@ export class ArcadeManager {
         ctx.stroke();
         ctx.restore();
       }
-      if (mt >= 1) {
-        anim.marbleAnim = null;
-      }
+      if (mt >= 1) anim.marbleAnim = null;
     }
 
-    // 8. Fragmentos de cristal cayendo al abismo
+    // 9. FRAGMENTOS DE CRISTAL CAYENDO AL ABISMO
     for (const s of anim.shards) {
       const p = proj(s.x, s.y, s.z);
-      if (p.depth <= 0.16) continue;
+      if (p.depth <= 0.15) continue;
       ctx.save();
       ctx.translate(p.x, p.y);
       ctx.rotate(s.rot);
@@ -3039,33 +3049,85 @@ export class ArcadeManager {
       ctx.restore();
     }
 
-    // 9. Dibujar a los jugadores en 3ra persona durante:
-    //    - 'INTRO_SQUAD' (plano inicial de los 3 jugadores #456, #058 y #100)
-    //    - 'RELAY_REVEAL_BEHIND' (cuando cae el de adelante y la cámara muestra claramente al jugador de atrás antes de entrar a su POV)
+    // 10. JUGADORES 3D REALISTAS CON ROSTROS DETALLADOS Y SOMBRAS DIRECCIONALES EN TIEMPO REAL
+    //     - Los jugadores de atrás (#058 y #100) SIEMPRE existen en el mundo 3D detrás de ti,
+    //       así que cuando giras la cámara 180° (o pulsas "👀 Voltear a ver Atrás"), los ves parados
+    //       detrás de ti con sus rostros, ojos parpadeando, boca moviéndose al hablar y sombra direccional real.
+    const backPlayersToDraw = [];
     if (anim.camMode === 'INTRO_SQUAD') {
-      const introSquad = [
-        { number: '100', row: -1.68, lane: 2.05 },
-        { number: '058', row: -1.32, lane: 0.95 },
-        { number: '456', row: -0.82, lane: 1.50 }
-      ];
-      introSquad.forEach(p => {
-        this.drawThirdPersonPlayer3D(ctx, proj, p.number, p.row, p.lane, 0, false);
-      });
+      backPlayersToDraw.push(
+        { number: '100', row: -2.05, lane: 2.02, faceCamera: false, relayTag: false },
+        { number: '058', row: -1.62, lane: 0.98, faceCamera: false, relayTag: false },
+        { number: '456', row: -1.18, lane: 1.50, faceCamera: false, relayTag: false }
+      );
     } else if (anim.camMode === 'RELAY_REVEAL_BEHIND') {
-      // Mostrar también al 3er jugador atrás si quedan 2 vidas, y destacar con etiqueta de relevo al jugador que asume el mando
       if (st.lives === 2) {
-        const backRow = Math.max(-1.45, anim.playerRow - 0.62);
-        this.drawThirdPersonPlayer3D(ctx, proj, '100', backRow, 1.85, 0, false);
+        const row100 = Math.max(-1.85, anim.playerRow - 0.68);
+        backPlayersToDraw.push({ number: '100', row: row100, lane: 1.92, faceCamera: true, relayTag: false });
       }
-      this.drawThirdPersonPlayer3D(ctx, proj, anim.playerNumber, anim.playerRow, anim.playerLane, 0, true);
+      backPlayersToDraw.push({ number: anim.playerNumber, row: anim.playerRow, lane: anim.playerLane, faceCamera: true, relayTag: true });
     } else {
-      // MODO POV PRIMERA PERSONA:
-      // Cuando la cámara mira hacia abajo (pitch > 0.42), dibuja tus zapatillas blancas paradas EXACTAMENTE
-      // sobre el cristal (`anim.playerRow`, `anim.playerLane`) para que veas el peldaño bajo tus pies
-      if (pitch > 0.42 && anim.camMode !== 'POV_FALLING') {
+      // En modo POV normal: posicionar a los compañeros vivos detrás del jugador actual
+      if (st.lives >= 3) {
+        const row058 = st.currentStep > 0 ? (st.currentStep - 1) : -1.62;
+        const lane058 = st.currentStep > 0 && st.safeLaneHistory[st.currentStep - 1] !== undefined
+          ? st.safeLaneHistory[st.currentStep - 1]
+          : 0.98;
+        const row100 = st.currentStep > 1 ? (st.currentStep - 2) : -2.08;
+        const lane100 = st.currentStep > 1 && st.safeLaneHistory[st.currentStep - 2] !== undefined
+          ? st.safeLaneHistory[st.currentStep - 2]
+          : 2.02;
+        backPlayersToDraw.push(
+          { number: '100', row: row100, lane: lane100, faceCamera: true, relayTag: false },
+          { number: '058', row: row058, lane: lane058, faceCamera: true, relayTag: false }
+        );
+      } else if (st.lives === 2) {
+        const row100 = st.currentStep > 0 ? (st.currentStep - 1) : -1.68;
+        const lane100 = st.currentStep > 0 && st.safeLaneHistory[st.currentStep - 1] !== undefined
+          ? st.safeLaneHistory[st.currentStep - 1]
+          : 1.85;
+        backPlayersToDraw.push(
+          { number: '100', row: row100, lane: lane100, faceCamera: true, relayTag: false }
+        );
+      }
+    }
+
+    // Ordenar jugadores de más lejano a más cercano respecto a la cámara
+    backPlayersToDraw.sort((a, b) => Math.abs(b.row - camZ) - Math.abs(a.row - camZ));
+    for (const bp of backPlayersToDraw) {
+      this.drawRealisticHumanPlayer3D(
+        ctx,
+        proj,
+        bp.number,
+        bp.row,
+        bp.lane,
+        0,
+        now,
+        mainLightX,
+        mainLightY,
+        mainLightZ,
+        bp.faceCamera,
+        bp.relayTag
+      );
+    }
+
+    // 11. PIES Y PIERNAS EN POV + SOMBRA DIRECCIONAL PROPIA + MANOS CON 5 DEDOS EN PRIMER PLANO
+    if (anim.camMode !== 'INTRO_SQUAD' && anim.camMode !== 'RELAY_REVEAL_BEHIND') {
+      // Sombra direccional real proyectada por tu propio cuerpo sobre el cristal/plataforma bajo tus pies
+      this.drawCharacterDirectionalShadow3D(
+        ctx,
+        proj,
+        (anim.playerLane - 1.5) * 0.94,
+        0,
+        anim.playerRow,
+        mainLightX,
+        mainLightY,
+        mainLightZ
+      );
+
+      if (pitch > 0.35 && anim.camMode !== 'POV_FALLING') {
         this.drawPOVFeetOnGlass3D(ctx, proj, anim, W, H, pitch);
       }
-      // Manos y mangas en primer plano con el parche del jugador activo (#456, #058 o #100)
       this.drawPOVHandsForeground(ctx, W, H, now, anim);
     }
 
@@ -3073,101 +3135,696 @@ export class ArcadeManager {
   }
 
   /**
-   * Dibuja un jugador de Squid Game en 3D con uniforme verde, zapatillas blancas y parche numérico.
-   * Si `isRelayHighlight === true`, muestra un indicador flotante claro de que este jugador de atrás toma el relevo.
+   * Dibuja las paredes del coliseo con cortinajes plisados estilo Squid Game y los pilares profundos del abismo
    */
-  drawThirdPersonPlayer3D(ctx, projFn, numberStr, row, lane, liftY = 0, isRelayHighlight = false) {
-    const wx = (lane - 1.5) * 0.94;
-    const basePt = projFn(wx, liftY, row);
-    if (basePt.depth <= 0.18) return;
+  drawColiseumWallsAndAbyss3D(ctx, proj, st, now, W, H) {
+    // 1. Pilares de acero descendiendo hacia el abismo oscuro (y = 0 hasta y = -18)
+    for (let r = -1; r <= st.totalSteps + 1; r += 2) {
+      [-1.88, 1.88].forEach(px => {
+        const pTop = proj(px, -0.06, r);
+        const pBot = proj(px, -16.5, r);
+        if (pTop.depth > 0.2 && pBot.depth > 0.2) {
+          const pillarGrad = ctx.createLinearGradient(pTop.x, pTop.y, pBot.x, pBot.y);
+          pillarGrad.addColorStop(0, 'rgba(159, 18, 57, 0.65)');
+          pillarGrad.addColorStop(0.45, 'rgba(30, 41, 59, 0.45)');
+          pillarGrad.addColorStop(1, 'rgba(2, 6, 23, 0)');
+          ctx.strokeStyle = pillarGrad;
+          ctx.lineWidth = Math.max(1.5, Math.min(8, pTop.scale * 0.032));
+          ctx.beginPath();
+          ctx.moveTo(pTop.x, pTop.y);
+          ctx.lineTo(pBot.x, pBot.y);
+          ctx.stroke();
+        }
+      });
 
-    const s = Math.max(0.35, Math.min(3.2, basePt.scale * 0.0068));
+      // Crucetas estructurales en el abismo bajo el puente
+      const cL = proj(-1.88, -2.2, r);
+      const cR = proj(1.88, -2.2, r);
+      if (cL.depth > 0.25 && cR.depth > 0.25) {
+        ctx.strokeStyle = 'rgba(71, 85, 105, 0.28)';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(cL.x, cL.y);
+        ctx.lineTo(cR.x, cR.y);
+        ctx.stroke();
+      }
+    }
 
-    ctx.save();
-    ctx.translate(basePt.x, basePt.y);
+    // 2. Paredes laterales de circo con pliegues verticales carmesí/violeta
+    [-6.2, 6.2].forEach(wallX => {
+      for (let z = -2; z < st.totalSteps + 3; z += 2) {
+        const wTL = proj(wallX, 4.8, z + 2);
+        const wTR = proj(wallX, 4.8, z);
+        const wBR = proj(wallX, -8.0, z);
+        const wBL = proj(wallX, -8.0, z + 2);
+        if (wTL.depth > 0.25 && wTR.depth > 0.25) {
+          const isEven = ((z + 2) / 2) % 2 === 0;
+          ctx.fillStyle = isEven ? 'rgba(136, 19, 55, 0.16)' : 'rgba(76, 5, 25, 0.14)';
+          ctx.strokeStyle = 'rgba(244, 63, 94, 0.15)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(wTL.x, wTL.y);
+          ctx.lineTo(wTR.x, wTR.y);
+          ctx.lineTo(wBR.x, wBR.y);
+          ctx.lineTo(wBL.x, wBL.y);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+        }
+      }
+    });
+  }
 
-    // Sombra sobre la plataforma o vidrio
-    ctx.fillStyle = 'rgba(2, 6, 23, 0.55)';
-    ctx.beginPath();
-    ctx.ellipse(0, 0, 15 * s, 5.5 * s, 0, 0, Math.PI * 2);
-    ctx.fill();
+  /**
+   * Dibuja el techo industrial del coliseo con cerchas metálicas, anillos de luz dorados y haces volumétricos
+   */
+  drawColiseumCeilingAndLights3D(ctx, proj, st, now, mainLightX, mainLightY, mainLightZ) {
+    const roofY = 4.9;
 
-    // Piernas y zapatillas blancas
-    ctx.strokeStyle = '#0f766e';
-    ctx.lineWidth = Math.max(2, 5.2 * s);
-    ctx.lineCap = 'round';
-    [-5.2 * s, 5.2 * s].forEach(lx => {
-      ctx.beginPath();
-      ctx.moveTo(lx, -21 * s);
-      ctx.lineTo(lx, -2 * s);
-      ctx.stroke();
+    // Cerchas transversales del techo
+    for (let z = -2; z <= st.totalSteps + 2; z += 2) {
+      const rL = proj(-4.8, roofY, z);
+      const rR = proj(4.8, roofY, z);
+      if (rL.depth > 0.22 && rR.depth > 0.22) {
+        ctx.strokeStyle = 'rgba(100, 116, 139, 0.38)';
+        ctx.lineWidth = Math.max(1, Math.min(4, rL.scale * 0.018));
+        ctx.beginPath();
+        ctx.moveTo(rL.x, rL.y);
+        ctx.lineTo(rR.x, rR.y);
+        ctx.stroke();
+      }
+    }
 
-      ctx.fillStyle = '#f8fafc';
-      ctx.beginPath();
-      ctx.ellipse(lx, 0, 4.4 * s, 2.3 * s, 0, 0, Math.PI * 2);
-      ctx.fill();
+    // Vigas longitudinales del techo
+    [-3.6, 0, 3.6].forEach(lx => {
+      for (let z = -2; z < st.totalSteps + 2; z += 2) {
+        const p1 = proj(lx, roofY, z);
+        const p2 = proj(lx, roofY, z + 2);
+        if (p1.depth > 0.22 && p2.depth > 0.22) {
+          ctx.strokeStyle = 'rgba(148, 163, 184, 0.30)';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(p1.x, p1.y);
+          ctx.lineTo(p2.x, p2.y);
+          ctx.stroke();
+        }
+      }
     });
 
-    // Chaqueta deportiva verde Squid Game
-    ctx.fillStyle = '#0d9488';
-    ctx.strokeStyle = '#f8fafc';
-    ctx.lineWidth = Math.max(1, 1.2 * s);
+    // Luminarias circulares cálidas y reflectores volumétricos a lo largo del techo
+    for (let z = 0; z <= st.totalSteps; z += 3) {
+      const lampPt = proj(z % 6 === 0 ? -0.9 : 0.9, roofY - 0.25, z);
+      const floorTarget = proj(0, 0, z);
+      if (lampPt.depth > 0.2) {
+        // Cono de luz volumétrica hacia el puente
+        if (floorTarget.depth > 0.2) {
+          const coneGrad = ctx.createLinearGradient(lampPt.x, lampPt.y, floorTarget.x, floorTarget.y);
+          coneGrad.addColorStop(0, 'rgba(253, 224, 71, 0.20)');
+          coneGrad.addColorStop(0.5, 'rgba(244, 63, 94, 0.07)');
+          coneGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+          ctx.fillStyle = coneGrad;
+          const spread = Math.max(25, floorTarget.scale * 0.55);
+          ctx.beginPath();
+          ctx.moveTo(lampPt.x - 6, lampPt.y);
+          ctx.lineTo(lampPt.x + 6, lampPt.y);
+          ctx.lineTo(floorTarget.x + spread, floorTarget.y);
+          ctx.lineTo(floorTarget.x - spread, floorTarget.y);
+          ctx.closePath();
+          ctx.fill();
+        }
+
+        // Halo y foco de la lámpara en el techo
+        const rBulb = Math.max(3, Math.min(14, lampPt.scale * 0.045));
+        const glow = ctx.createRadialGradient(lampPt.x, lampPt.y, 1, lampPt.x, lampPt.y, rBulb * 3.2);
+        glow.addColorStop(0, 'rgba(254, 240, 138, 0.95)');
+        glow.addColorStop(0.4, 'rgba(251, 191, 36, 0.45)');
+        glow.addColorStop(1, 'rgba(251, 191, 36, 0)');
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(lampPt.x, lampPt.y, rBulb * 3.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+
+  /**
+   * Dibuja la Plataforma de Salida al inicio del puente con su franja de peligro amarilla/negra y barandales
+   * para que cuando estás en el Peldaño 1 se vea claramente que estás en el inicio del puente.
+   */
+  drawStartPlatform3D(ctx, proj, now) {
+    const zFront = -0.52;
+    const zBack = -2.65;
+    const pFL = proj(-2.15, 0, zFront);
+    const pFR = proj(2.15, 0, zFront);
+    const pBR = proj(2.15, 0, zBack);
+    const pBL = proj(-2.15, 0, zBack);
+
+    if (pFL.depth > 0.15 || pFR.depth > 0.15 || pBR.depth > 0.15 || pBL.depth > 0.15) {
+      ctx.save();
+      ctx.fillStyle = '#0f172a';
+      ctx.strokeStyle = '#34d399';
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.moveTo(pFL.x, pFL.y);
+      ctx.lineTo(pFR.x, pFR.y);
+      ctx.lineTo(pBR.x, pBR.y);
+      ctx.lineTo(pBL.x, pBL.y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Franja de advertencia amarilla/negra en el borde de salida (z = -0.68 a -0.52)
+      const stripes = 10;
+      for (let i = 0; i < stripes; i++) {
+        const x1 = -2.05 + (i / stripes) * 4.10;
+        const x2 = -2.05 + ((i + 1) / stripes) * 4.10;
+        const s1 = proj(x1, 0.005, -0.53);
+        const s2 = proj(x2, 0.005, -0.53);
+        const s3 = proj(x2, 0.005, -0.72);
+        const s4 = proj(x1, 0.005, -0.72);
+        if (s1.depth > 0.15 && s3.depth > 0.15) {
+          ctx.fillStyle = i % 2 === 0 ? '#facc15' : '#090d16';
+          ctx.beginPath();
+          ctx.moveTo(s1.x, s1.y);
+          ctx.lineTo(s2.x, s2.y);
+          ctx.lineTo(s3.x, s3.y);
+          ctx.lineTo(s4.x, s4.y);
+          ctx.closePath();
+          ctx.fill();
+        }
+      }
+
+      // Barandales laterales iluminados de la plataforma de salida
+      [-2.10, 2.10].forEach(rx => {
+        const rFTop = proj(rx, 0.95, zFront);
+        const rBTop = proj(rx, 0.95, zBack);
+        const rFBot = proj(rx, 0, zFront);
+        const rBBot = proj(rx, 0, zBack);
+        if (rFTop.depth > 0.16 && rBTop.depth > 0.16) {
+          ctx.strokeStyle = '#f43f5e';
+          ctx.lineWidth = 2.4;
+          ctx.beginPath();
+          ctx.moveTo(rFTop.x, rFTop.y);
+          ctx.lineTo(rBTop.x, rBTop.y);
+          ctx.moveTo(rFBot.x, rFBot.y);
+          ctx.lineTo(rFTop.x, rFTop.y);
+          ctx.moveTo(rBBot.x, rBBot.y);
+          ctx.lineTo(rBTop.x, rBTop.y);
+          ctx.stroke();
+        }
+      });
+
+      ctx.restore();
+    }
+  }
+
+  /**
+   * Dibuja la Plataforma de Meta VIP al final del puente con su arco neón y los 3 Guardianes Rosas (○ △ □)
+   * proyectando sombras direccionales reales sobre la meta.
+   */
+  drawFinishPlatformAndGuards3D(ctx, proj, st, now, lightX, lightY, lightZ) {
+    const fNear = st.totalSteps - 0.35;
+    const fFar = st.totalSteps + 1.45;
+    const fTL = proj(-2.25, 0, fFar);
+    const fTR = proj(2.25, 0, fFar);
+    const fBR = proj(2.25, 0, fNear);
+    const fBL = proj(-2.25, 0, fNear);
+
+    if (fTL.depth <= 0.18 || fBR.depth <= 0.18) return;
+
+    ctx.save();
+    // Piso de la plataforma de meta
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+    ctx.strokeStyle = '#34d399';
+    ctx.lineWidth = 2.5;
     ctx.beginPath();
-    ctx.roundRect(-12 * s, -45 * s, 24 * s, 24 * s, 5 * s);
+    ctx.moveTo(fTL.x, fTL.y);
+    ctx.lineTo(fTR.x, fTR.y);
+    ctx.lineTo(fBR.x, fBR.y);
+    ctx.lineTo(fBL.x, fBL.y);
+    ctx.closePath();
     ctx.fill();
     ctx.stroke();
 
-    // Parche blanco con el número (#456, #058 o #100)
-    ctx.fillStyle = '#f8fafc';
-    ctx.beginPath();
-    ctx.roundRect(-9.5 * s, -38 * s, 19 * s, 10 * s, 2 * s);
-    ctx.fill();
-
-    ctx.fillStyle = '#0f172a';
-    ctx.font = `900 ${Math.max(8, Math.round(7.5 * s))}px "JetBrains Mono", monospace`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(numberStr, 0, -33 * s);
-
-    // Cabeza
-    ctx.fillStyle = '#f1c27d';
-    ctx.beginPath();
-    ctx.arc(0, -54 * s, 7.2 * s, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = '#0f172a';
-    ctx.beginPath();
-    ctx.arc(0, -55.5 * s, 7.4 * s, Math.PI * 0.95, Math.PI * 2.05);
-    ctx.fill();
-
-    // Etiqueta clara de relevo cuando cae el jugador de adelante
-    if (isRelayHighlight) {
-      ctx.fillStyle = '#fbbf24';
-      ctx.strokeStyle = '#0f172a';
-      ctx.lineWidth = 2;
+    // Arco Neón de Meta ("META ○ △ □")
+    const archZ = st.totalSteps + 0.95;
+    const aBL = proj(-1.95, 0, archZ);
+    const aTL = proj(-1.95, 2.35, archZ);
+    const aTR = proj(1.95, 2.35, archZ);
+    const aBR = proj(1.95, 0, archZ);
+    if (aTL.depth > 0.2 && aTR.depth > 0.2) {
+      ctx.strokeStyle = '#f43f5e';
+      ctx.lineWidth = Math.max(2.5, aTL.scale * 0.035);
       ctx.beginPath();
-      ctx.roundRect(-72, -82 * s - 16, 144, 22, 8);
-      ctx.fill();
+      ctx.moveTo(aBL.x, aBL.y);
+      ctx.lineTo(aTL.x, aTL.y);
+      ctx.lineTo(aTR.x, aTR.y);
+      ctx.lineTo(aBR.x, aBR.y);
       ctx.stroke();
 
-      ctx.fillStyle = '#0f172a';
-      ctx.font = '900 10px "JetBrains Mono", monospace';
-      ctx.fillText(`⬆️ TOMA EL RELEVO #${numberStr}`, 0, -82 * s - 5);
+      const bannerMid = proj(0, 2.15, archZ);
+      ctx.fillStyle = '#fde047';
+      ctx.font = `900 ${Math.max(9, Math.min(18, Math.round(bannerMid.scale * 0.14)))}px "JetBrains Mono", monospace`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('★ META CACES ○ △ □ ★', bannerMid.x, bannerMid.y);
+    }
+
+    // Los 3 Guardianes de Squid Game custodiando la meta:
+    // Izquierda: Triángulo (△ Soldado armado), Centro: Cuadrado (□ Líder), Derecha: Círculo (○ Guardia)
+    const guards = [
+      { x: -1.15, z: st.totalSteps + 0.55, symbol: 'triangle' },
+      { x: 0.0,   z: st.totalSteps + 0.42, symbol: 'square' },
+      { x: 1.15,  z: st.totalSteps + 0.55, symbol: 'circle' }
+    ];
+
+    guards.forEach(g => {
+      this.drawPinkGuard3D(ctx, proj, g.x, g.z, g.symbol, now, lightX, lightY, lightZ);
+    });
+
+    ctx.restore();
+  }
+
+  /**
+   * Dibuja un Guardián Rosa de Squid Game en 3D con overol carmesí, máscara negra con símbolo (○, △ o □),
+   * rifle y sombra direccional proyectada en tiempo real sobre la plataforma de meta.
+   */
+  drawPinkGuard3D(ctx, proj, wx, wz, symbolType, now, lightX, lightY, lightZ) {
+    // 1. Sombra direccional real en el suelo de la meta
+    this.drawCharacterDirectionalShadow3D(ctx, proj, wx, 0, wz, lightX, lightY, lightZ);
+
+    const basePt = proj(wx, 0, wz);
+    const headPt = proj(wx, 1.48, wz);
+    if (basePt.depth <= 0.2 || headPt.depth <= 0.2) return;
+
+    const hPx = Math.max(12, Math.abs(basePt.y - headPt.y));
+    const wPx = hPx * 0.42;
+
+    ctx.save();
+    // Piernas del overol rosa
+    ctx.strokeStyle = '#be123c';
+    ctx.lineWidth = Math.max(2, wPx * 0.28);
+    ctx.lineCap = 'round';
+    [-wPx * 0.24, wPx * 0.24].forEach(lx => {
+      ctx.beginPath();
+      ctx.moveTo(basePt.x + lx, basePt.y - hPx * 0.42);
+      ctx.lineTo(basePt.x + lx, basePt.y);
+      ctx.stroke();
+    });
+
+    // Torso con overol rosa intenso y cinturón táctico negro
+    const torsoGrad = ctx.createLinearGradient(basePt.x - wPx * 0.5, headPt.y, basePt.x + wPx * 0.5, basePt.y);
+    torsoGrad.addColorStop(0, '#fb7185');
+    torsoGrad.addColorStop(0.5, '#e11d48');
+    torsoGrad.addColorStop(1, '#881337');
+    ctx.fillStyle = torsoGrad;
+    ctx.beginPath();
+    ctx.roundRect(basePt.x - wPx * 0.52, basePt.y - hPx * 0.80, wPx * 1.04, hPx * 0.44, Math.max(2, wPx * 0.18));
+    ctx.fill();
+
+    // Cinturón negro y cierre central
+    ctx.fillStyle = '#090d16';
+    ctx.fillRect(basePt.x - wPx * 0.52, basePt.y - hPx * 0.48, wPx * 1.04, Math.max(2, hPx * 0.06));
+
+    // Rifle táctico cruzado sobre el pecho
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = Math.max(2, wPx * 0.18);
+    ctx.beginPath();
+    ctx.moveTo(basePt.x - wPx * 0.55, basePt.y - hPx * 0.68);
+    ctx.lineTo(basePt.x + wPx * 0.58, basePt.y - hPx * 0.46);
+    ctx.stroke();
+
+    // Capucha rosa y máscara negra de esgrima
+    const rHead = Math.max(4, hPx * 0.17);
+    const hx = headPt.x;
+    const hy = basePt.y - hPx * 0.90;
+
+    ctx.fillStyle = '#e11d48';
+    ctx.beginPath();
+    ctx.arc(hx, hy, rHead * 1.18, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#090d16';
+    ctx.beginPath();
+    ctx.arc(hx, hy, rHead * 0.95, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Símbolo geométrico blanco brillante en la máscara (○, △ o □)
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = Math.max(1.4, rHead * 0.24);
+    const symR = rHead * 0.52;
+    if (symbolType === 'circle') {
+      ctx.beginPath();
+      ctx.arc(hx, hy, symR, 0, Math.PI * 2);
+      ctx.stroke();
+    } else if (symbolType === 'triangle') {
+      ctx.beginPath();
+      ctx.moveTo(hx, hy - symR);
+      ctx.lineTo(hx + symR * 0.95, hy + symR * 0.8);
+      ctx.lineTo(hx - symR * 0.95, hy + symR * 0.8);
+      ctx.closePath();
+      ctx.stroke();
+    } else {
+      ctx.strokeRect(hx - symR * 0.85, hy - symR * 0.85, symR * 1.7, symR * 1.7);
     }
 
     ctx.restore();
   }
 
   /**
-   * Dibuja tus propias zapatillas blancas proyectadas directamente en el centro del peldaño (`playerRow`, `playerLane`)
-   * cuando miras hacia tus pies al saltar y aterrizar sobre el vidrio.
+   * Dibuja las vigas de acero rosas en 3D con cara superior y lateral a lo largo del puente
+   */
+  drawSteelBridgeRails3D(ctx, proj, st) {
+    [-1.88, -0.94, 0, 0.94, 1.88].forEach(railX => {
+      for (let z = -1; z < st.totalSteps + 1; z++) {
+        const p1 = proj(railX, -0.03, z);
+        const p2 = proj(railX, -0.03, z + 1);
+        const p1Bot = proj(railX, -0.14, z);
+        const p2Bot = proj(railX, -0.14, z + 1);
+
+        if (p1.depth > 0.16 && p2.depth > 0.16) {
+          // Cara lateral de la viga I de acero
+          ctx.fillStyle = 'rgba(159, 18, 57, 0.78)';
+          ctx.beginPath();
+          ctx.moveTo(p1.x, p1.y);
+          ctx.lineTo(p2.x, p2.y);
+          ctx.lineTo(p2Bot.x, p2Bot.y);
+          ctx.lineTo(p1Bot.x, p1Bot.y);
+          ctx.closePath();
+          ctx.fill();
+
+          // Borde superior metálico brillante
+          ctx.strokeStyle = '#fb7185';
+          ctx.lineWidth = Math.max(1.5, Math.min(6, p1.scale * 0.022));
+          ctx.beginPath();
+          ctx.moveTo(p1.x, p1.y);
+          ctx.lineTo(p2.x, p2.y);
+          ctx.stroke();
+        }
+      }
+    });
+  }
+
+  /**
+   * Proyecta en tiempo real la Sombra Direccional anatómica de un personaje sobre el plano del suelo/vidrio
+   * calculando la intersección exacta rayo-plano desde el reflector superior (lightX, lightY, lightZ).
+   */
+  drawCharacterDirectionalShadow3D(ctx, proj, charX, floorY, charZ, lightX, lightY, lightZ) {
+    // Puntos 3D del esqueleto del personaje (pies, cadera, hombros, cabeza y manos)
+    const footL = this.projectDirectionalShadowPoint(charX - 0.14, floorY + 0.02, charZ, floorY, lightX, lightY, lightZ, proj);
+    const footR = this.projectDirectionalShadowPoint(charX + 0.14, floorY + 0.02, charZ, floorY, lightX, lightY, lightZ, proj);
+    const shldrL = this.projectDirectionalShadowPoint(charX - 0.24, floorY + 1.15, charZ, floorY, lightX, lightY, lightZ, proj);
+    const shldrR = this.projectDirectionalShadowPoint(charX + 0.24, floorY + 1.15, charZ, floorY, lightX, lightY, lightZ, proj);
+    const headTop = this.projectDirectionalShadowPoint(charX, floorY + 1.56, charZ, floorY, lightX, lightY, lightZ, proj);
+
+    if (footL.depth <= 0.16 || headTop.depth <= 0.16) return;
+
+    ctx.save();
+    const shadGrad = ctx.createLinearGradient(footL.x, footL.y, headTop.x, headTop.y);
+    shadGrad.addColorStop(0, 'rgba(2, 6, 23, 0.72)');
+    shadGrad.addColorStop(0.65, 'rgba(2, 6, 23, 0.42)');
+    shadGrad.addColorStop(1, 'rgba(2, 6, 23, 0.08)');
+
+    ctx.fillStyle = shadGrad;
+    ctx.beginPath();
+    ctx.moveTo(footL.x, footL.y);
+    ctx.lineTo(footR.x, footR.y);
+    ctx.lineTo(shldrR.x, shldrR.y);
+    ctx.lineTo(headTop.x, headTop.y);
+    ctx.lineTo(shldrL.x, shldrL.y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  /**
+   * Dibuja un Jugador Humano 3D Realista (#456, #058 o #100) con:
+   * - Sombra direccional proyectada en tiempo real desde los reflectores superiores
+   * - Zapatillas blancas detalladas, piernas con rodillas y franjas laterales
+   * - Chaqueta deportiva verde Squid Game con cierre, cuello y parche numérico
+   * - Brazos articulados y manos con 5 dedos individuales (nunca círculos)
+   * - Rostro humano realista (ojos con iris/pupilas y parpadeo, cejas, nariz con relieve,
+   *   boca que se mueve cuando el personaje está hablando y peinado diferenciado).
+   */
+  drawRealisticHumanPlayer3D(ctx, proj, numberStr, row, lane, liftY, now, lightX, lightY, lightZ, showFrontFace = true, isRelayHighlight = false) {
+    const wx = (lane - 1.5) * 0.94;
+    const bobY = Math.sin(now * 0.0045 + Number(numberStr)) * 0.02;
+    const wy = liftY + bobY;
+
+    // 1. Sombra direccional geométrica en tiempo real sobre la plataforma o vidrio
+    this.drawCharacterDirectionalShadow3D(ctx, proj, wx, 0, row, lightX, lightY, lightZ);
+
+    const basePt = proj(wx, wy, row);
+    const headPt = proj(wx, wy + 1.54, row);
+    if (basePt.depth <= 0.18 || headPt.depth <= 0.18) return;
+
+    const totalH = Math.max(18, Math.abs(basePt.y - headPt.y));
+    const s = totalH / 64;
+
+    const st = this.bridgeState;
+    const isThisPlayerSpeaking = Boolean(
+      this.isSpeakingNow &&
+      st &&
+      st.anim &&
+      st.anim.activeChatter &&
+      st.anim.activeChatter.speakerNum === numberStr
+    );
+
+    ctx.save();
+    ctx.translate(basePt.x, basePt.y);
+
+    // 2. Piernas articuladas (muslo + rodilla + pantorrilla) y zapatillas blancas
+    [-6.2 * s, 6.2 * s].forEach((lx, idx) => {
+      const dir = idx === 0 ? -1 : 1;
+      // Pantalón deportivo verde oscuro con sombreado cilíndrico
+      ctx.strokeStyle = '#0f766e';
+      ctx.lineWidth = Math.max(2.5, 6.2 * s);
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(lx, -25 * s);
+      ctx.lineTo(lx + dir * 0.8 * s, -12 * s);
+      ctx.lineTo(lx, -2.5 * s);
+      ctx.stroke();
+
+      // Doble franja blanca lateral del pantalón
+      ctx.strokeStyle = '#f8fafc';
+      ctx.lineWidth = Math.max(1, 1.2 * s);
+      ctx.beginPath();
+      ctx.moveTo(lx + dir * 2.6 * s, -24 * s);
+      ctx.lineTo(lx + dir * 2.6 * s, -3 * s);
+      ctx.stroke();
+
+      // Zapatilla blanca con suela y puntera
+      ctx.fillStyle = '#f8fafc';
+      ctx.strokeStyle = '#64748b';
+      ctx.lineWidth = Math.max(1, 1.1 * s);
+      ctx.beginPath();
+      ctx.ellipse(lx + dir * 0.6 * s, -1 * s, 5.2 * s, 2.6 * s, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    });
+
+    // 3. Torso con sombreado 3D, cierre central blanco, cuello y parche numérico
+    const torsoGrad = ctx.createLinearGradient(-14 * s, -50 * s, 14 * s, -24 * s);
+    torsoGrad.addColorStop(0, '#14b8a6');
+    torsoGrad.addColorStop(0.5, '#0d9488');
+    torsoGrad.addColorStop(1, '#115e59');
+    ctx.fillStyle = torsoGrad;
+    ctx.strokeStyle = '#042f2e';
+    ctx.lineWidth = Math.max(1, 1.2 * s);
+    ctx.beginPath();
+    ctx.roundRect(-13.5 * s, -48 * s, 27 * s, 25 * s, 6 * s);
+    ctx.fill();
+    ctx.stroke();
+
+    // Cierre vertical blanco de la chaqueta
+    ctx.strokeStyle = '#e2e8f0';
+    ctx.lineWidth = Math.max(1, 1.3 * s);
+    ctx.beginPath();
+    ctx.moveTo(0, -48 * s);
+    ctx.lineTo(0, -23 * s);
+    ctx.stroke();
+
+    // Parche blanco con el número del jugador (#456, #058, #100)
+    ctx.fillStyle = '#f8fafc';
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = Math.max(0.8, 0.9 * s);
+    ctx.beginPath();
+    ctx.roundRect(-10.5 * s, -41 * s, 21 * s, 10.5 * s, 2.2 * s);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#0f172a';
+    ctx.font = `900 ${Math.max(8, Math.round(7.8 * s))}px "JetBrains Mono", monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(numberStr, 0, -35.6 * s);
+
+    // 4. Brazos articulados y manos realistas con 5 dedos individuales
+    [-1, 1].forEach(dir => {
+      const wave = isThisPlayerSpeaking ? Math.sin(now * 0.015) * 3.5 * s : 0;
+      const shX = dir * 14 * s;
+      const shY = -45 * s;
+      const elbX = dir * 17.5 * s;
+      const elbY = -34 * s - wave * 0.5;
+      const wristX = dir * 15.5 * s;
+      const wristY = -24 * s - wave;
+
+      ctx.strokeStyle = '#0d9488';
+      ctx.lineWidth = Math.max(2.2, 5.0 * s);
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(shX, shY);
+      ctx.lineTo(elbX, elbY);
+      ctx.lineTo(wristX, wristY);
+      ctx.stroke();
+
+      // Palma de la mano + 5 dedos articulados
+      ctx.fillStyle = '#f1c27d';
+      ctx.beginPath();
+      ctx.ellipse(wristX, wristY + 1.5 * s, 2.8 * s, 2.4 * s, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      for (let f = -2; f <= 2; f++) {
+        const fx = wristX + f * 0.95 * s;
+        const fy = wristY + 3.2 * s;
+        ctx.beginPath();
+        ctx.roundRect(fx - 0.4 * s, fy, 0.8 * s, 2.4 * s, 0.4 * s);
+        ctx.fill();
+      }
+    });
+
+    // 5. Cuello, Cabeza Anatómica y Rostro Humano Realista
+    ctx.fillStyle = '#e0ac69';
+    ctx.fillRect(-3.2 * s, -52 * s, 6.4 * s, 5 * s);
+
+    const headY = -58.5 * s;
+    const headR = 8.6 * s;
+
+    // Orejas
+    ctx.fillStyle = '#e0ac69';
+    [-headR * 0.95, headR * 0.95].forEach(ex => {
+      ctx.beginPath();
+      ctx.ellipse(ex, headY + 0.5 * s, 1.8 * s, 3.0 * s, 0, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    // Rostro con sombreado 3D radial
+    const faceGrad = ctx.createRadialGradient(-2 * s, headY - 2 * s, 1 * s, 0, headY, headR * 1.1);
+    faceGrad.addColorStop(0, '#ffdbac');
+    faceGrad.addColorStop(0.65, '#f1c27d');
+    faceGrad.addColorStop(1, '#c68642');
+    ctx.fillStyle = faceGrad;
+    ctx.beginPath();
+    ctx.ellipse(0, headY, headR * 0.92, headR * 1.06, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Cabello detallado según el jugador (#100 canoso/veterano, #058 y #456 pelinegro con volumen)
+    ctx.fillStyle = numberStr === '100' ? '#475569' : '#0f172a';
+    ctx.beginPath();
+    ctx.arc(0, headY - 1.8 * s, headR * 0.98, Math.PI * 0.92, Math.PI * 2.08);
+    ctx.fill();
+
+    if (showFrontFace) {
+      // Cejas expresivas
+      ctx.strokeStyle = numberStr === '100' ? '#334155' : '#0f172a';
+      ctx.lineWidth = Math.max(1, 1.3 * s);
+      [-1, 1].forEach(dir => {
+        ctx.beginPath();
+        ctx.moveTo(dir * 1.5 * s, headY - 2.2 * s);
+        ctx.lineTo(dir * 5.2 * s, headY - 2.8 * s);
+        ctx.stroke();
+      });
+
+      // Ojos con esclera blanca, iris, pupila y parpadeo natural
+      const isBlinking = (Math.floor(now / 180) % 23 === 0);
+      [-3.3 * s, 3.3 * s].forEach(ox => {
+        if (isBlinking) {
+          ctx.strokeStyle = '#0f172a';
+          ctx.lineWidth = Math.max(1, 1.1 * s);
+          ctx.beginPath();
+          ctx.moveTo(ox - 1.8 * s, headY - 0.5 * s);
+          ctx.lineTo(ox + 1.8 * s, headY - 0.5 * s);
+          ctx.stroke();
+        } else {
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath();
+          ctx.ellipse(ox, headY - 0.5 * s, 1.9 * s, 1.25 * s, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = '#1e293b';
+          ctx.beginPath();
+          ctx.arc(ox, headY - 0.5 * s, 0.95 * s, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath();
+          ctx.arc(ox - 0.3 * s, headY - 0.8 * s, 0.35 * s, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      });
+
+      // Nariz con relieve
+      ctx.strokeStyle = 'rgba(146, 64, 14, 0.65)';
+      ctx.lineWidth = Math.max(0.9, 1.0 * s);
+      ctx.beginPath();
+      ctx.moveTo(0, headY - 0.8 * s);
+      ctx.lineTo(-0.7 * s, headY + 2.2 * s);
+      ctx.lineTo(0.8 * s, headY + 2.2 * s);
+      ctx.stroke();
+
+      // Boca realista (se abre y anima en tiempo real cuando el jugador te está hablando)
+      const mouthY = headY + 4.6 * s;
+      if (isThisPlayerSpeaking) {
+        const openH = (1.2 + Math.abs(Math.sin(now * 0.022)) * 2.2) * s;
+        ctx.fillStyle = '#7f1d1d';
+        ctx.strokeStyle = '#450a0a';
+        ctx.lineWidth = Math.max(0.8, 0.9 * s);
+        ctx.beginPath();
+        ctx.ellipse(0, mouthY, 2.6 * s, openH, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      } else {
+        ctx.strokeStyle = '#7c2d12';
+        ctx.lineWidth = Math.max(1, 1.2 * s);
+        ctx.beginPath();
+        ctx.moveTo(-2.4 * s, mouthY);
+        ctx.quadraticCurveTo(0, mouthY + 0.8 * s, 2.4 * s, mouthY);
+        ctx.stroke();
+      }
+    }
+
+    // Etiqueta de identificación o relevo sobre el jugador
+    if (isRelayHighlight || isThisPlayerSpeaking) {
+      const labelTxt = isRelayHighlight
+        ? `⬆️ TOMA EL RELEVO #${numberStr}`
+        : `🗣️ #${numberStr} HABLANDO`;
+      ctx.fillStyle = isRelayHighlight ? '#fbbf24' : '#10b981';
+      ctx.strokeStyle = '#0f172a';
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.roundRect(-64, headY - 26 * s, 128, 20, 7);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#0f172a';
+      ctx.font = '900 10px "JetBrains Mono", monospace';
+      ctx.fillText(labelTxt, 0, headY - 26 * s + 10);
+    }
+
+    ctx.restore();
+  }
+
+  /**
+   * Dibuja tus propias piernas y zapatillas blancas paradas directamente sobre el peldaño
+   * cuando miras hacia abajo en POV.
    */
   drawPOVFeetOnGlass3D(ctx, projFn, anim, W, H, pitch) {
-    const visibility = Math.min(1, Math.max(0, (pitch - 0.42) / 0.45));
+    const visibility = Math.min(1, Math.max(0, (pitch - 0.35) / 0.45));
     if (visibility <= 0.02) return;
 
     const baseX = (anim.playerLane - 1.5) * 0.94;
-    const baseZ = anim.playerRow + 0.05; // Justo en el centro del peldaño bajo tus ojos
+    const baseZ = anim.playerRow + 0.05;
 
     ctx.save();
     ctx.globalAlpha = visibility * 0.96;
@@ -3175,15 +3832,14 @@ export class ArcadeManager {
     [-1, 1].forEach(dir => {
       const footWorldX = baseX + dir * 0.14;
       const heelPt = projFn(footWorldX, 0.01, baseZ - 0.06);
-      const toePt = projFn(footWorldX, 0.01, baseZ + 0.15);
+      const toePt = projFn(footWorldX, 0.01, baseZ + 0.16);
       if (heelPt.depth <= 0.15 || toePt.depth <= 0.15) return;
 
       const fx = (heelPt.x + toePt.x) * 0.5;
       const fy = (heelPt.y + toePt.y) * 0.5;
-      const footLen = Math.max(20, Math.min(54, Math.hypot(toePt.x - heelPt.x, toePt.y - heelPt.y) * 1.15));
+      const footLen = Math.max(22, Math.min(58, Math.hypot(toePt.x - heelPt.x, toePt.y - heelPt.y) * 1.15));
       const footWid = footLen * 0.48;
 
-      // Suela y zapatilla blanca de Squid Game pisando el centro del vidrio
       ctx.fillStyle = '#f8fafc';
       ctx.strokeStyle = '#64748b';
       ctx.lineWidth = 2;
@@ -3192,7 +3848,6 @@ export class ArcadeManager {
       ctx.fill();
       ctx.stroke();
 
-      // Cordones / puntera gris
       ctx.strokeStyle = '#94a3b8';
       ctx.lineWidth = 1.4;
       ctx.beginPath();
@@ -3200,7 +3855,6 @@ export class ArcadeManager {
       ctx.lineTo(fx + footWid * 0.45, fy - footLen * 0.1);
       ctx.stroke();
 
-      // Pantalón verde deportivo arriba del tobillo
       ctx.fillStyle = '#0d9488';
       ctx.beginPath();
       ctx.roundRect(fx - footWid * 0.85, fy + footLen * 0.15, footWid * 1.7, footLen * 0.55, 6);
@@ -3211,7 +3865,7 @@ export class ArcadeManager {
   }
 
   /**
-   * Dibuja en primer plano las manos y mangas del jugador activo (#456, #058 o #100)
+   * Dibuja en primer plano las manos articuladas con 5 dedos y mangas del jugador activo (#456, #058 o #100)
    */
   drawPOVHandsForeground(ctx, W, H, now, anim) {
     const activeNum = anim.playerNumber || '456';
@@ -3221,7 +3875,7 @@ export class ArcadeManager {
     ctx.save();
     [-1, 1].forEach(dir => {
       ctx.save();
-      const baseX = W * 0.5 + dir * Math.min(165, W * 0.34) + swayX * dir;
+      const baseX = W * 0.5 + dir * Math.min(170, W * 0.35) + swayX * dir;
       const baseY = H + 12 + swayY;
 
       ctx.strokeStyle = '#0f766e';
@@ -3260,11 +3914,16 @@ export class ArcadeManager {
       ctx.ellipse(handX, handY, 9.5, 7.5, dir * -0.25, 0, Math.PI * 2);
       ctx.fill();
 
+      // Pulgar + 4 dedos individuales
+      ctx.beginPath();
+      ctx.roundRect(handX + dir * 6.5, handY - 3, 3.5, 6.5, 1.5);
+      ctx.fill();
+
       for (let f = 0; f < 4; f++) {
         const fx = handX + (f - 1.5) * 3.6;
-        const fy = handY - 6.5 - (f === 1 || f === 2 ? 2 : 0);
+        const fy = handY - 6.5 - (f === 1 || f === 2 ? 2.2 : 0);
         ctx.beginPath();
-        ctx.roundRect(fx - 1.5, fy - 4, 3, 7, 1.5);
+        ctx.roundRect(fx - 1.5, fy - 4.5, 3, 8, 1.5);
         ctx.fill();
       }
       ctx.restore();
