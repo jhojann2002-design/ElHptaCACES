@@ -1,4 +1,4 @@
-const CACHE_NAME = 'caces-medprep-v16-pov-audio';
+const CACHE_NAME = 'caces-medprep-v17-pov-uleam';
 const CORE_ASSETS = [
   './',
   './index.html',
@@ -56,9 +56,8 @@ self.addEventListener('fetch', (event) => {
     url.pathname.endsWith('.css');
 
   if (isCodeOrMarkup) {
-    // Si piden games.js o app.js con un ?v= viejo, forzar descarga fresca sin caché del navegador (no-store)
     const cleanUrl = (url.pathname.endsWith('/games.js') || url.pathname.endsWith('/app.js'))
-      ? `${url.origin}${url.pathname}?v=16`
+      ? `${url.origin}${url.pathname}?v=17`
       : req.url;
 
     event.respondWith(
